@@ -5,8 +5,8 @@
 #include <random>
 #include <string>
 #include <chrono>
+#include <thread>
 using U64 = uint64_t;
-using U32 = uint32_t;
 using namespace std;
 
 
@@ -61,24 +61,50 @@ U64 castlinghash[16];
 U64 zobrist[1024];
 int history[1024];
 int gamelength = 0;
-int moves[10][256];
-int position = 0;
 int last = 0;
+int moves[20][256];
+int position = 0;
+int evalm[2] = {0, 0};
+int evale[2] = {0, 0};
+int nodecount = 0;
+int bestmove = -1;
 U64 zobristhash = 0ULL; //1 bit color, 7 bits halfmove, 6 bits ep, 4 bits castling KQkq
 //6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit castling, 1 bit double pawn push,
 //1 bit en passant, 1 bit promotion, 2 bits promoted piece, 1 bit capture, 3 bits piece captured
 //26 bits total for now?
 int movecount;
-int castlechange[64] = {
-    13, 15, 15, 15, 12, 15, 15, 14,
-    15, 15, 15, 15, 15, 15, 15, 15,
-    15, 15, 15, 15, 15, 15, 15, 15,
-    15, 15, 15, 15, 15, 15, 15, 15,
-    15, 15, 15, 15, 15, 15, 15, 15,
-    15, 15, 15, 15, 15, 15, 15, 15,
-    15, 15, 15, 15, 15, 15, 15, 15,
-     7, 15, 15, 15,  3, 15, 15, 11
-};
+auto start = chrono::steady_clock::now();
+int materialm[6] = {82, 337, 365, 477, 1025, 0};
+int materiale[6] = {94, 281, 297, 512, 936, 0};
+int pstm[6][64] = {{0,0,0,0,0,0,0,0,-35,-1,-20,-23,-15,24,38,-22,-26,-4,-4,-10,3,3,33,-12,-27,-2,-5,12,17,6,10,-25,
+-14,13,6,21,23,12,17,-23,-6,7,26,31,65,56,25,-20,98,134,61,95,68,126,34,-11,0,0,0,0,0,0,0,0},
+{-105,-21,-58,-33,-17,-28,-19,-23,-29,-53,-12,-3,-1,18,-14,-19,-23,-9,12,10,19,17,25,-16,-13,4,16,13,28,19,21,-8,
+-9,17,19,53,37,69,18,22,-47,60,37,65,84,129,73,44,-73,-41,72,36,23,62,7,-17,-167,-89,-34,-49,61,-97,-15,-107},
+{-33,-3,-14,-21,-13,-12,-39,-21,4,15,16,0,7,21,33,1,0,15,15,15,14,27,18,10,-6,13,13,26,34,12,10,4,
+-4,5,19,50,37,37,7,-2,-16,37,43,40,35,50,37,-2,-26,16,-18,-13,30,59,18,-47,-29,4,-82,-37,-25,-42,7,-8},
+{-19,-13,1,17,16,7,-37,-26,-44,-16,-20,-9,-1,11,-6,-71,-45,-25,-16,-17,3,0,-5,-33,-36,-26,-12,-1,9,-7,6,-23,
+-24,-11,7,26,24,35,-8,-20,-5,19,26,36,17,45,61,16,27,32,58,62,80,67,26,44,32,42,32,51,63,9,31,43},
+{-1,-18,-9,10,-15,-25,-31,-50,-35,-8,11,2,8,15,-3,1,-14,2,-11,-2,-5,2,14,5,-9,-26,-9,-10,-2,-4,3,-3,
+-27,-27,-16,-16,-1,17,-2,1,-13,-17,7,8,29,56,47,57,-24,-39,-5,1,-16,57,28,54,-28,0,29,12,59,44,43,45},
+{-15,36,12,-54,8,-28,44,14,1,7,-8,-64,-43,-16,9,8,-14,-14,-22,-46,-44,-30,-15,-27,-49,-1,-27,-39,-46,-44,-33,-51,
+-17,-20,-12,-27,-30,-25,-14,-36,-9,24,2,-16,-20,6,22,-22,29,-1,-20,-7,-8,-4,-38,-29,-65,23,16,-15,-56,-34,2,13}};
+int pste[6][64] = {{0,0,0,0,0,0,0,0,13,8,8,10,13,0,2,-7,4,7,-6,1,0,-5,-1,-8,13,9,-3,-7,-7,-8,3,-1,
+32,24,13,5,-2,4,17,17,94,100,85,67,56,53,82,84,178,173,158,134,147,132,165,187,0,0,0,0,0,0,0,0},
+{-29,-51,-23,-15,-22,-18,-50,-64,-42,-20,-10,-5,-2,-20,-23,-44,-23,-3,-1,15,10,-3,-20,-22,-18,-6,16,25,16,17,4,-18,
+-17,3,22,22,22,11,8,-18,-24,-20,10,9,-1,-9,-19,-41,-25,-8,-25,-2,-9,-25,-24,-52,-58,-38,-13,-28,-31,-27,-63,-99},
+{-23,-9,-23,-5,-9,-16,-5,-17,-14,-18,-7,-1,4,-9,-15,-27,-12,-3,8,10,13,3,-7,-15,-6,3,13,19,7,10,-3,-9,
+-3,9,12,9,14,10,3,2,2,-8,0,-1,-2,6,0,4,-8,-4,7,-12,-3,-13,-4,-14,-14,-21,-11,-8,-7,-9,-17,-24},
+{-9,2,3,-1,-5,-13,4,-20,-6,-6,0,2,-9,-9,-11,-3,-4,0,-5,-1,-7,-12,-8,-16,3,5,8,4,-5,-6,-8,-11,
+4,3,13,1,2,1,-1,2,7,7,7,5,4,-3,-5,-3,11,13,13,11,-3,3,8,3,13,10,18,15,12,12,8,5},
+{-33,-28,-22,-43,-5,-32,-20,-41,-22,-23,-30,-16,-16,-23,-36,-32,-16,-27,15,6,9,17,10,5,-18,28,19,47,31,34,39,23,
+3,22,24,45,57,40,57,36,-20,6,9,49,47,35,19,9,-17,20,32,41,58,25,30,0,-9,22,22,27,27,19,10,20},
+{-53,-34,-21,-11,-28,-14,-24,-43,-27,-11,4,13,14,4,-5,-17,-19,-3,11,21,23,16,7,-9,-18,-4,21,24,27,23,9,-11,
+-8,22,24,27,26,33,26,3,10,17,23,15,20,45,44,13,-12,17,14,17,17,38,23,11,-74,-35,-18,-18,-11,15,4,-17}};
+int castlechange[64] = {13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,7, 15, 15, 15,  3, 15, 15, 11};
+int startpiece[16] = {3, 1, 2, 4, 5, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0};
+int phase[6] = {0, 1, 1, 2, 4, 0};
+int gamephase = 0;
 int game[31] = {
     0x0100470C, 0x010058F3, 0x00006481, 0x00007B7E, 0x0000491C,
     0x000056E3, 0x00074B64, 0x0007549B, 0x00054DAD, 0x00055252,
@@ -87,16 +113,6 @@ int game[31] = {
     0x000D8AD0, 0x0080FEBC, 0x0000499E, 0x010059F7, 0x02004BE6,
     0x00009953, 0x000085C5, 0x0009BAFB, 0x0009CF7F, 0x0000BB2B,
     0x000944CA};
-string convert[64] = {
-    "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
-    "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
-    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3",
-    "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4",
-    "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5",
-    "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6",
-    "a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7",
-    "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
-};
 U64 shift_w(U64 bitboard) {
     return (bitboard & ~FileA) >> 1;
 }
@@ -242,11 +258,25 @@ void initializeboard() {
     Bitboards[7] = (Rank1 | Rank8) & FileE;
     position = 0x0003C000;
     history[0] = position;
+    int startmatm = (8*materialm[0]+2*(materialm[1]+materialm[2]+materialm[3])+materialm[4]);
+    int startmate = (8*materiale[0]+2*(materiale[1]+materiale[2]+materiale[3])+materiale[4]);
+    int startpstm = 0;
+    int startpste = 0;
+    for (int i = 0; i < 16; i++) {
+        startpstm+=pstm[startpiece[i]][i];
+        startpste+=pste[startpiece[i]][i];
+    }
+    evalm[0] = startmatm+startpstm;
+    evalm[1] = startmatm+startpstm;
+    evale[0] = startmate+startpste;
+    evale[1] = startmate+startpste;
+    gamephase = 24;
+    gamelength = 0;
 }
 int repetitions() {
     int repeats = 0;
     for (int i = gamelength-2; i>=last; i-=2) {
-        if (zobrist[i] = zobrist[gamelength]) {
+        if (zobrist[i] == zobrist[gamelength]) {
             repeats++;
         }
     }
@@ -286,7 +316,7 @@ U64 scratchzobrist() {
     scratch^=castlinghash[castling];
     return scratch;
 }
-void makemove(int notation) {
+void makemove(int notation, bool reversible) {
     //return true if move is legal, false if move is not
     //6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit capture, 3 bits piece captured, 1 bit promotion,
     //2 bits promoted piece, 1 bit castling, 1 bit double pawn push, 1 bit en passant,
@@ -306,6 +336,10 @@ void makemove(int notation) {
     int piece = (notation >> 13) & 7;
     Bitboards[color]^=((1ULL << from) | (1ULL << to));
     Bitboards[piece]^=((1ULL << from) | (1ULL << to));
+    evalm[color] += pstm[piece-2][(56*color)^to];
+    evalm[color] -= pstm[piece-2][(56*color)^from];
+    evale[color] += pste[piece-2][(56*color)^to];
+    evale[color] -= pste[piece-2][(56*color)^from];
     zobristhash^=(hashes[color][from]^hashes[color][to]);
     zobristhash^=(hashes[piece][from]^hashes[piece][to]);
     int captured = (notation >> 17) & 7;
@@ -316,19 +350,33 @@ void makemove(int notation) {
     position&=0x0003C0FF;
     if (piece==2) {
         halfmove = 0;
-        last = gamelength;
+        if (!reversible) {
+            last = gamelength;
+        }
     }
     if (notation & (1 << 16)) {
         Bitboards[color^1]^=(1ULL << to);
         Bitboards[captured]^=(1ULL << to);
         zobristhash^=(hashes[color^1][to]^hashes[captured][to]);
+        evalm[color^1]-=materialm[captured-2];
+        evale[color^1]-=materiale[captured-2];
+        evalm[color^1]-=pstm[captured-2][(56*(color^1))^to];
+        evale[color^1]-=pste[captured-2][(56*(color^1))^to];
+        gamephase-=phase[captured-2];
         halfmove = 0;
-        last = gamelength;
+        if (!reversible) {
+            last = gamelength;
+        }
     }
     if (notation & (1 << 20)) {
         Bitboards[2]^=(1ULL << to);
         Bitboards[promoted+3]^=(1ULL << to);
         zobristhash^=(hashes[2][to]^hashes[promoted+3][to]);
+        evalm[color]-=(materialm[0]+pstm[0][(56*color)^from]);
+        evalm[color]+=(materialm[promoted+1]+pstm[promoted+1][(56*color)^from]);
+        evale[color]-=(materiale[0]+pste[0][(56*color)^from]);
+        evale[color]+=(materiale[promoted+1]+pste[promoted+1][(56*color)^to]);
+        gamephase+=phase[promoted+1];
     }
     else if (notation & (1 << 23)) {
         if (to&4) {
@@ -336,12 +384,16 @@ void makemove(int notation) {
             Bitboards[5]^=((1ULL << (to-1)) | (1ULL << (to+1)));
             zobristhash^=(hashes[color][to-1]^hashes[color][to+1]);
             zobristhash^=(hashes[5][to-1]^hashes[5][to+1]);
+            evalm[color]+=(pstm[4][7^(56*color)]-pstm[4][5^(56*color)]);
+            evale[color]+=(pste[4][7^(56*color)]-pste[4][5^(56*color)]);
         }
         else {
             Bitboards[color]^=((1ULL << (to-2)) | (1ULL << (to+1)));
             Bitboards[5]^=((1ULL << (to-2)) | (1ULL << (to+1)));
             zobristhash^=(hashes[color][to-2]^hashes[color][to+1]);
             zobristhash^=(hashes[5][to-2]^hashes[5][to+1]);
+            evalm[color]+=(pstm[4][0^(56*color)]-pstm[4][3^(56*color)]);
+            evale[color]+=(pste[4][0^(56*color)]-pste[4][3^(56*color)]);
         }
     }
     else if (notation & (1 << 24)) {
@@ -358,6 +410,8 @@ void makemove(int notation) {
         Bitboards[2]^=(1ULL << shadow);
         Bitboards[color^1]^=(1ULL << shadow);
         zobristhash^=(hashes[2][shadow]^hashes[color^1][shadow]);
+        evalm[color^1]-=(materialm[0]+pstm[0][(56*(color^1))^shadow]);
+        evale[color^1]-=(materiale[0]+pste[0][(56*(color^1))^shadow]);
     }
     position&=(0x00003FFF | (castlechange[from] << 14));
     position&=(0x00003FFF | (castlechange[to] << 14));
@@ -372,6 +426,7 @@ void makemove(int notation) {
     zobristhash^=castlinghash[castling];
     history[gamelength] = position;
     zobrist[gamelength] = zobristhash;
+    nodecount++;
 }
 void unmakemove(int notation) {
     gamelength--;
@@ -383,24 +438,42 @@ void unmakemove(int notation) {
     int piece = (notation >> 13) & 7;
     Bitboards[color]^=((1ULL << from) | (1ULL << to));
     Bitboards[piece]^=((1ULL << from) | (1ULL << to));
+    evalm[color] += pstm[piece-2][(56*color)^from];
+    evalm[color] -= pstm[piece-2][(56*color)^to];
+    evale[color] += pste[piece-2][(56*color)^from];
+    evale[color] -= pste[piece-2][(56*color)^to];
     int captured = (notation >> 17) & 7;
     int promoted = (notation >> 21) & 3;
     if (notation & (1 << 16)) {
         Bitboards[color^1]^=(1ULL << to);
         Bitboards[captured]^=(1ULL << to);
+        evalm[color^1]+=materialm[captured-2];
+        evale[color^1]+=materiale[captured-2];
+        evalm[color^1]+=pstm[captured-2][(56*(color^1))^to];
+        evale[color^1]+=pste[captured-2][(56*(color^1))^to];
+        gamephase+=phase[captured-2];
     }
     if (notation & (1 << 20)) {
         Bitboards[2]^=(1ULL << to);
         Bitboards[promoted+3]^=(1ULL << to);
+        evalm[color]+=(materialm[0]+pstm[0][(56*color)^from]);
+        evalm[color]-=(materialm[promoted+1]+pstm[promoted+1][(56*color)^from]);
+        evale[color]+=(materiale[0]+pste[0][(56*color)^from]);
+        evale[color]-=(materiale[promoted+1]+pste[promoted+1][(56*color)^to]);
+        gamephase-=phase[promoted+1];
     }
     else if (notation & (1 << 23)) {
         if (to&4) {
             Bitboards[color]^=((1ULL << (to-1)) | (1ULL << (to+1)));
             Bitboards[5]^=((1ULL << (to-1)) | (1ULL << (to+1)));
+            evalm[color]+=(pstm[4][5^(56*color)]-pstm[4][7^(56*color)]);
+            evale[color]+=(pste[4][5^(56*color)]-pste[4][7^(56*color)]);
         }
         else {
             Bitboards[color]^=((1ULL << (to-2)) | (1ULL << (to+1)));
             Bitboards[5]^=((1ULL << (to-2)) | (1ULL << (to+1)));
+            evalm[color]+=(pstm[4][3^(56*color)]-pstm[4][0^(56*color)]);
+            evale[color]+=(pste[4][3^(56*color)]-pste[4][0^(56*color)]);
         }
     }
     else if (notation & (1 << 25)) {
@@ -413,6 +486,8 @@ void unmakemove(int notation) {
         }
         Bitboards[2]^=(1ULL << shadow);
         Bitboards[color^1]^=(1ULL << shadow);
+        evalm[color^1]+=(materialm[0]+pstm[0][(56*(color^1))^shadow]);
+        evale[color^1]+=(materiale[0]+pste[0][(56*(color^1))^shadow]);
     }
 }
 int generatemoves(int color, bool capturesonly, int depth) {
@@ -919,6 +994,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     return movecount;
 }
 string algebraic(int notation) {
+    string convert[64] = { "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
+    "a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3", "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4", "a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5",
+    "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6","a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8"};
     string header = convert[notation&63]+convert[(notation>>6)&63];
     if (notation&(1 << 20)) {
         int piece = (notation>>21)&3;
@@ -942,7 +1020,7 @@ U64 perft(int depth, int initialdepth, int color) {
     U64 ans = 0;
     if (depth > 1) {
         for (int i = 0; i < movcount; i++) {
-            makemove(moves[depth][i]);
+            makemove(moves[depth][i], true);
             if (depth == initialdepth) {
                 cout << algebraic(moves[depth][i]);
                 cout << ": ";
@@ -966,7 +1044,7 @@ U64 perftnobulk(int depth, int initialdepth, int color) {
     int movcount = generatemoves(color, 0, depth);
     U64 ans = 0;
     for (int i = 0; i < movcount; i++) {
-        makemove(moves[depth][i]);
+        makemove(moves[depth][i], true);
         if (depth == initialdepth) {
             cout << algebraic(moves[depth][i]);
             cout << ": ";
@@ -986,6 +1064,11 @@ U64 perftnobulk(int depth, int initialdepth, int color) {
 }
 void parseFEN(string FEN) {
     gamelength = 0;
+    gamephase = 0;
+    evalm[0] = 0;
+    evalm[1] = 0;
+    evale[0] = 0;
+    evale[1] = 0;
     int order[64] = {56, 57, 58, 59, 60, 61, 62, 63, 48, 49, 50, 51, 52, 53, 54, 55, 40, 41, 42, 43, 44, 45, 46, 47,
     32, 33, 34, 35, 36, 37, 38, 39, 24, 25, 26, 27, 28, 29, 30, 31, 16, 17, 18, 19, 20, 21, 22, 23,
     8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7};
@@ -1007,21 +1090,47 @@ void parseFEN(string FEN) {
             Bitboards[0]|=(1ULL << order[progress]);
             if (hm == 'P') {
                 Bitboards[2] |= (1ULL << order[progress]);
+                evalm[0]+=materialm[0];
+                evale[0]+=materiale[0];
+                evalm[0]+=pstm[0][order[progress]];
+                evale[0]+=pste[0][order[progress]];
             }
             if (hm == 'N') {
                 Bitboards[3] |= (1ULL << order[progress]);
+                evalm[0]+=materialm[1];
+                evale[0]+=materiale[1];
+                evalm[0]+=pstm[1][order[progress]];
+                evale[0]+=pste[1][order[progress]];
+                gamephase+=1;
             }
             if (hm == 'B') {
                 Bitboards[4] |= (1ULL << order[progress]);
+                evalm[0]+=materialm[2];
+                evale[0]+=materiale[2];
+                evalm[0]+=pstm[2][order[progress]];
+                evale[0]+=pste[2][order[progress]];
+                gamephase+=1;
             }
             if (hm == 'R') {
                 Bitboards[5] |= (1ULL << order[progress]);
+                evalm[0]+=materialm[3];
+                evale[0]+=materiale[3];
+                evalm[0]+=pstm[3][order[progress]];
+                evale[0]+=pste[3][order[progress]];
+                gamephase+=2;
             }
             if (hm == 'Q') {
                 Bitboards[6] |= (1ULL << order[progress]);
+                evalm[0]+=materialm[4];
+                evale[0]+=materiale[4];
+                evalm[0]+=pstm[4][order[progress]];
+                evale[0]+=pste[4][order[progress]];
+                gamephase+=4;
             }
             if (hm == 'K') {
                 Bitboards[7] |= (1ULL << order[progress]);
+                evalm[0]+=pstm[5][order[progress]];
+                evale[0]+=pste[5][order[progress]];
             }
             progress++;
         }
@@ -1029,21 +1138,47 @@ void parseFEN(string FEN) {
             Bitboards[1]|=(1ULL << order[progress]);
             if (hm == 'p') {
                 Bitboards[2] |= (1ULL << order[progress]);
+                evalm[1]+=materialm[0];
+                evale[1]+=materiale[0];
+                evalm[1]+=pstm[0][56^order[progress]];
+                evale[1]+=pste[0][56^order[progress]];
             }
             if (hm == 'n') {
                 Bitboards[3] |= (1ULL << order[progress]);
+                evalm[1]+=materialm[1];
+                evale[1]+=materiale[1];
+                evalm[1]+=pstm[1][56^order[progress]];
+                evale[1]+=pste[1][56^order[progress]];
+                gamephase+=1;
             }
             if (hm == 'b') {
                 Bitboards[4] |= (1ULL << order[progress]);
+                evalm[1]+=materialm[2];
+                evale[1]+=materiale[2];
+                evalm[1]+=pstm[2][56^order[progress]];
+                evale[1]+=pste[2][56^order[progress]];
+                gamephase+=1;
             }
             if (hm == 'r') {
                 Bitboards[5] |= (1ULL << order[progress]);
+                evalm[1]+=materialm[3];
+                evale[1]+=materiale[3];
+                evalm[1]+=pstm[3][56^order[progress]];
+                evale[1]+=pste[3][56^order[progress]];
+                gamephase+=2;
             }
             if (hm == 'q') {
                 Bitboards[6] |= (1ULL << order[progress]);
+                evalm[1]+=materialm[4];
+                evale[1]+=materiale[4];
+                evalm[1]+=pstm[4][56^order[progress]];
+                evale[1]+=pste[4][56^order[progress]];
+                gamephase+=4;
             }
             if (hm == 'k') {
                 Bitboards[7] |= (1ULL << order[progress]);
+                evalm[1]+=pstm[5][56^order[progress]];
+                evale[1]+=pste[5][56^order[progress]];
             }
             progress++;
         }
@@ -1099,6 +1234,213 @@ void parseFEN(string FEN) {
     zobrist[0] = zobristhash;
     history[0] = position;
 }
+int evaluate(int color) {
+    int midphase = min(24, gamephase);
+    int endphase = 24-midphase;
+    int mideval = evalm[color]-evalm[color^1];
+    int endeval = evale[color]-evale[color^1];
+    return (mideval*midphase+endeval*endphase)/24;
+}
+int quiesce(int alpha, int beta, int color, int depth) {
+    int score = evaluate(color);
+    if (depth > 3) {
+        return score;
+    }
+    int movcount;
+    if (checkers(color)) {
+        movcount = generatemoves(color, 0, 16+depth);
+        if (movcount == 0) {
+            return -28000;
+        }
+    }
+    else {
+        if (alpha < score) {
+            alpha = score;
+        }
+        if (score >= beta) {
+            return beta;
+        }
+        movcount = generatemoves(color, 1, 16+depth);
+    }
+    for (int i = 0; i < movcount; i++) {
+        makemove(moves[16+depth][i], 1);
+        score = -quiesce(-beta, -alpha, color^1, depth+1);
+        unmakemove(moves[16+depth][i]);
+        if (score >= beta) {
+            return beta;
+        }
+        if (score > alpha) {
+            alpha = score;
+        }
+    }
+    return alpha;
+}
+int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, int nodelimit, int timelimit) {
+    if (repetitions() >= 2) {
+        return 0;
+    }
+    if (((position >> 1)&127) >= 100) {
+        cout << position << " " << ((position >> 1)&127) << "\n";
+        return 0;
+    }
+    if (depth == 0) {
+        return quiesce(alpha, beta, color, 0);
+    }
+    if (depth == initialdepth) {
+        bestmove = -1;
+    }
+    int score = -30000;
+    int movcount = generatemoves(color, 0, depth);
+    if (movcount == 0) {
+        if (checkers(color)) {
+            return -(depth+28000);
+        }
+        else {
+            return 0;
+        }
+    }
+    for (int i = 0; i < movcount; i++) {
+        makemove(moves[depth][i], true);
+        score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, nodelimit, timelimit);
+        unmakemove(moves[depth][i]);
+        if (score > alpha) {
+            if (score >= beta) {
+                return beta;
+            }
+            alpha = score;
+            if (depth == initialdepth) {
+                bestmove = i;
+            }
+        }
+        if (nodecount > nodelimit) {
+            return 0;
+        }
+        if (depth > 1) {
+            auto now = chrono::steady_clock::now();
+            auto timetaken = chrono::duration_cast<chrono::milliseconds>(now - start);
+            if (timetaken.count() > timelimit) {
+                return 0;
+            }
+        }
+    }
+    return alpha;
+}
+void iterative(int nodelimit, int timelimit, int color) {
+    nodecount = 0;
+    start = chrono::steady_clock::now();
+    int depth = 1;
+    int bestmove1 = 0;
+    int validscore = 0;
+    bool stop = false;
+    while (!stop) {
+        int score = alphabeta(depth, depth, -29000, 29000, color, nodelimit, timelimit);
+        auto now = chrono::steady_clock::now();
+        auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
+        if (nodecount < nodelimit && timetaken.count() < timelimit) {
+            generatemoves(color, 0, 0);
+            cout << "info depth " << depth << " nodes " << nodecount << " score cp " << score << " pv " << algebraic(moves[0][bestmove]) << "\n";
+            depth++;
+            bestmove1 = bestmove;
+            validscore = score;
+        }
+        else {
+            stop = true;
+        }
+    }
+    bestmove = bestmove1;
+    generatemoves(color, 0, 0);
+    cout << "bestmove " << algebraic(moves[0][bestmove1]) << "\n";
+}
+void uci() {
+    string ucicommand;
+    getline(cin, ucicommand);
+    if (ucicommand == "uci") {
+        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "uciok \n";
+    }
+    if (ucicommand == "quit") {
+        exit(0);
+    }
+    if (ucicommand == "isready") {
+        cout << "readyok \n";
+    }
+    if (ucicommand.substr(0, 23) == "position startpos moves") {
+        initializeboard();
+        int color = 0;
+        string mov = "";
+        for (int i = 24; i <= ucicommand.length(); i++) {
+            if ((ucicommand[i]==' ') || (i == ucicommand.length())) {
+                int len = generatemoves(color, 0, 0);
+                int played = -1;
+                for (int j = 0; j < len; j++) {
+                    if (algebraic(moves[0][j])==mov) {
+                        played = j;
+                    }
+                }
+                if (played >= 0) {
+                    makemove(moves[0][played], 0);
+                    color^=1;
+                }
+                mov = "";
+            }
+            else {
+                mov+=ucicommand[i];
+            }
+        }
+    }
+    if (ucicommand.substr(0, 12) == "position fen") {
+        int reader = 13;
+        while (ucicommand[reader]!='m' && reader < ucicommand.length()) {
+            reader++;
+        }
+        string fen = ucicommand.substr(13, reader-12);
+        parseFEN(fen);
+        int color = position&1;
+        string mov = "";
+        for (int i = reader+6; i <= ucicommand.length(); i++) {
+            if ((ucicommand[i]==' ') || (i == ucicommand.length())) {
+                int len = generatemoves(color, 0, 0);
+                int played = -1;
+                for (int j = 0; j < len; j++) {
+                    if (algebraic(moves[0][j])==mov) {
+                        played = j;
+                    }
+                }
+                if (played >= 0) {
+                    makemove(moves[0][played], 0);
+                    color^=1;
+                }
+                mov = "";
+            }
+            else {
+                mov+=ucicommand[i];
+            }
+        }
+    }
+    if (ucicommand.substr(0, 11) == "go movetime") {
+        int sum = 0;
+        int add = 1;
+        int reader = ucicommand.length()-1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        int color = gamelength%2;
+        iterative(1000000000, sum, color);
+    }
+    if (ucicommand.substr(0, 8) == "go nodes") {
+        int sum = 0;
+        int add = 1;
+        int reader = ucicommand.length()-1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        int color = position&1;
+        iterative(sum, 120000, color);
+    }
+}
 int main() {
     initializeleaperattacks();
     initializemasks();
@@ -1106,44 +1448,8 @@ int main() {
     initializeboard();
     initializezobrist();
     srand(time(0));
-    /*for (int i = 0; i < 30; i++) {
-        makemove(game[i]);
-    }*/
-    //parseFEN("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10");
-    //generatemoves(0, 0, 0);
-    //makemove(moves[0][0]);
-    //generatemoves(1, 0, 0);
-    //makemove(moves[0][0]);
-    //generatemoves(0, 0, 0);
-    //makemove(moves[0][27]);
-    //generatemoves(1, 0, 0);
-    /*for (int i = 0; i < 8; i++) {
-        cout << Bitboards[i] << endl;
+    while (true) {
+        uci();
     }
-    cout << position << endl;
-    makemove(moves[0][0]);
-    cout << perft(3, 3, 1) << endl;
-    unmakemove(moves[0][0]);
-    for (int i = 0; i < 8; i++) {
-        cout << Bitboards[i] << endl;
-    }*/
-    //cout << position << endl;
-    //makemove(moves[0][1]);
-    //cout << perft(3, 3, 1) << endl;
-    //printbitboard(Bitboards[0]|Bitboards[1]);
-    cout << endl;
-    //cout << generatemoves(0, 0, 0) << endl;
-    auto before = chrono::steady_clock::now();
-    cout << perftnobulk(6, 6, 0) << endl;
-    auto after = chrono::steady_clock::now();
-    auto timetaken = chrono::duration_cast<chrono::milliseconds>(after-before);
-    cout << "Took " << timetaken.count() << " milliseconds" << endl;
-    //string stop;
-    //cin >> stop;
-    //for (int i = 28; i >= 0; i--) {
-    //    unmakemove(game[i]);
-    //}
-    //printbitboard(Bitboards[0]);
-    //printbitboard(Bitboards[1]);
     return 0;
 }
