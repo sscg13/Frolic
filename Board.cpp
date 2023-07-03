@@ -62,7 +62,7 @@ U64 zobrist[1024];
 int history[1024];
 int gamelength = 0;
 int last = 0;
-int moves[20][256];
+int moves[25][256];
 int position = 0;
 int evalm[2] = {0, 0};
 int evale[2] = {0, 0};
@@ -86,7 +86,7 @@ int pstm[6][64] = {{0,0,0,0,0,0,0,0,-35,-1,-20,-23,-15,24,38,-22,-26,-4,-4,-10,3
 -24,-11,7,26,24,35,-8,-20,-5,19,26,36,17,45,61,16,27,32,58,62,80,67,26,44,32,42,32,51,63,9,31,43},
 {-1,-18,-9,10,-15,-25,-31,-50,-35,-8,11,2,8,15,-3,1,-14,2,-11,-2,-5,2,14,5,-9,-26,-9,-10,-2,-4,3,-3,
 -27,-27,-16,-16,-1,17,-2,1,-13,-17,7,8,29,56,47,57,-24,-39,-5,1,-16,57,28,54,-28,0,29,12,59,44,43,45},
-{-15,36,12,-54,8,-28,44,14,1,7,-8,-64,-43,-16,9,8,-14,-14,-22,-46,-44,-30,-15,-27,-49,-1,-27,-39,-46,-44,-33,-51,
+{-15,36,12,-54,8,-28,34,14,1,7,-8,-64,-43,-16,9,8,-14,-14,-22,-46,-44,-30,-15,-27,-49,-1,-27,-39,-46,-44,-33,-51,
 -17,-20,-12,-27,-30,-25,-14,-36,-9,24,2,-16,-20,6,22,-22,29,-1,-20,-7,-8,-4,-38,-29,-65,23,16,-15,-56,-34,2,13}};
 int pste[6][64] = {{0,0,0,0,0,0,0,0,13,8,8,10,13,0,2,-7,4,7,-6,1,0,-5,-1,-8,13,9,-3,-7,-7,-8,3,-1,
 32,24,13,5,-2,4,17,17,94,100,85,67,56,53,82,84,178,173,158,134,147,132,165,187,0,0,0,0,0,0,0,0},
@@ -395,6 +395,7 @@ void makemove(int notation, bool reversible) {
             evalm[color]+=(pstm[4][0^(56*color)]-pstm[4][3^(56*color)]);
             evale[color]+=(pste[4][0^(56*color)]-pste[4][3^(56*color)]);
         }
+        evalm[color]+=50;
     }
     else if (notation & (1 << 24)) {
         position^=((from+to) << 7);
@@ -475,6 +476,7 @@ void unmakemove(int notation) {
             evalm[color]+=(pstm[4][3^(56*color)]-pstm[4][0^(56*color)]);
             evale[color]+=(pste[4][3^(56*color)]-pste[4][0^(56*color)]);
         }
+        evalm[color]-=50;
     }
     else if (notation & (1 << 25)) {
         int shadow;
@@ -1031,6 +1033,9 @@ U64 perft(int depth, int initialdepth, int color) {
         if (depth == initialdepth-1) {
             cout << ans << " ";
         }
+        if (depth == initialdepth) {
+            cout << "\n" << ans << "\n";
+        }
         return ans;
     }
     else {
@@ -1248,9 +1253,9 @@ int quiesce(int alpha, int beta, int color, int depth) {
     }
     int movcount;
     if (checkers(color)) {
-        movcount = generatemoves(color, 0, 16+depth);
+        movcount = generatemoves(color, 0, 21+depth);
         if (movcount == 0) {
-            return -28000;
+            return -27000;
         }
     }
     else {
@@ -1260,12 +1265,12 @@ int quiesce(int alpha, int beta, int color, int depth) {
         if (score >= beta) {
             return beta;
         }
-        movcount = generatemoves(color, 1, 16+depth);
+        movcount = generatemoves(color, 1, 21+depth);
     }
     for (int i = 0; i < movcount; i++) {
-        makemove(moves[16+depth][i], 1);
+        makemove(moves[21+depth][i], 1);
         score = -quiesce(-beta, -alpha, color^1, depth+1);
-        unmakemove(moves[16+depth][i]);
+        unmakemove(moves[21+depth][i]);
         if (score >= beta) {
             return beta;
         }
@@ -1280,7 +1285,6 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, int n
         return 0;
     }
     if (((position >> 1)&127) >= 100) {
-        cout << position << " " << ((position >> 1)&127) << "\n";
         return 0;
     }
     if (depth == 0) {
@@ -1293,7 +1297,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, int n
     int movcount = generatemoves(color, 0, depth);
     if (movcount == 0) {
         if (checkers(color)) {
-            return -(depth+28000);
+            return -1*(depth+28000-initialdepth);
         }
         else {
             return 0;
@@ -1338,7 +1342,19 @@ void iterative(int nodelimit, int timelimit, int color) {
         auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
         if (nodecount < nodelimit && timetaken.count() < timelimit) {
             generatemoves(color, 0, 0);
-            cout << "info depth " << depth << " nodes " << nodecount << " score cp " << score << " pv " << algebraic(moves[0][bestmove]) << "\n";
+            if (abs(score) <= 27000) {
+                cout << "info depth " << depth << " nodes " << nodecount << " score cp " << score << " pv " << algebraic(moves[0][bestmove]) << "\n";
+            }
+            else {
+                int matescore;
+                if (score > 0) {
+                    matescore = 1+(28000-score)/2;
+                }
+                else {
+                    matescore = (-28000-score)/2;
+                }
+                cout << "info depth " << depth << " nodes " << nodecount << " score mate " << matescore << " pv " << algebraic(moves[0][bestmove]) << "\n";
+            }
             depth++;
             bestmove1 = bestmove;
             validscore = score;
@@ -1347,6 +1363,10 @@ void iterative(int nodelimit, int timelimit, int color) {
             stop = true;
         }
     }
+    auto now = chrono::steady_clock::now();
+    auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
+    int nps = 1000*(nodecount/timetaken.count());
+    cout << "info nodes " << nodecount << " nps " << nps << "\n";
     bestmove = bestmove1;
     generatemoves(color, 0, 0);
     cout << "bestmove " << algebraic(moves[0][bestmove1]) << "\n";
@@ -1363,7 +1383,7 @@ void uci() {
     if (ucicommand == "isready") {
         cout << "readyok \n";
     }
-    if (ucicommand.substr(0, 23) == "position startpos moves") {
+    if (ucicommand.substr(0, 17) == "position startpos") {
         initializeboard();
         int color = 0;
         string mov = "";
@@ -1416,6 +1436,94 @@ void uci() {
             }
         }
     }
+    if (ucicommand.substr(0, 8) == "go wtime") {
+        int wtime;
+        int btime;
+        int winc = 0;
+        int binc = 0;
+        int sum;
+        int add;
+        int reader = 8;
+        while (ucicommand[reader] != 'b') {
+            reader++;
+        }
+        reader--;
+        while (ucicommand[reader] == ' ') {
+            reader--;
+        }
+        sum = 0;
+        add = 1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        wtime = sum;
+        while (ucicommand[reader] != 'w' && reader < ucicommand.length()) {
+            reader++;
+        }
+        reader--;
+        while (ucicommand[reader] == ' ') {
+            reader--;
+        }
+        sum = 0;
+        add = 1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        btime = sum;
+        while (ucicommand[reader] != 'b' && reader < ucicommand.length()) {
+            reader++;
+        }
+        reader--;
+        while (ucicommand[reader] == ' ') {
+            reader--;
+        }
+        if (reader < ucicommand.length()-1) {
+            sum = 0;
+            add = 1;
+            while (ucicommand[reader] != ' ') {
+                sum+=((int)(ucicommand[reader]-48))*add;
+                add*=10;
+                reader--;
+            }
+            winc = sum;
+            while (ucicommand[reader] != 'b') {
+                reader++;
+            }
+            reader--;
+            while (ucicommand[reader] != ' ') {
+                reader--;
+            }
+            sum = 0;
+            add = 1;
+            while (ucicommand[reader] != ' ') {
+                sum+=((int)(ucicommand[reader]-48))*add;
+                add*=10;
+                reader--;
+            }
+            binc = sum;
+        }
+        int color = gamelength%2;
+        if (color == 0) {
+            if (wtime < 2*winc) {
+                iterative(1000000000, winc/2, 0);
+            }
+            else {
+                iterative(1000000000, wtime/20+winc, 0);
+            }
+        }
+        else {
+            if (btime < 2*binc) {
+                iterative(1000000000, binc/2,  1);
+            }
+            else {
+                iterative(1000000000, btime/20+binc, 1);
+            }
+        }
+    }
     if (ucicommand.substr(0, 11) == "go movetime") {
         int sum = 0;
         int add = 1;
@@ -1439,6 +1547,22 @@ void uci() {
         }
         int color = position&1;
         iterative(sum, 120000, color);
+    }
+    if (ucicommand.substr(0, 11) == "go infinite") {
+        int color = position&1;
+        iterative(1000000000, 120000, color);
+    }
+    if (ucicommand.substr(0, 5) == "perft") {
+        int color = position&1;
+        int sum = 0;
+        int add = 1;
+        int reader = ucicommand.length()-1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        perft(sum, sum, color);
     }
 }
 int main() {
