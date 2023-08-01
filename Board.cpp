@@ -1347,7 +1347,7 @@ int quiesce(int alpha, int beta, int color, int depth) {
     int score = evaluate(color);
     int bestscore = -30000;
     int movcount;
-    if (depth > 3) {
+    if (depth > 4) {
         return score;
     }
     if (checkers(color)) {
@@ -1460,7 +1460,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, int n
             return 0;
         }
     }
-    if (depth > 1) {
+    //if (depth > 1) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
             int temp1 = 0;
@@ -1475,7 +1475,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, int n
                 j--;
             }
         }
-    }
+    //}
     for (int i = 0; i < movcount; i++) {
         if (!stopsearch) {
             makemove(moves[depth][i], true);
