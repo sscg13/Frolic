@@ -1347,7 +1347,7 @@ int quiesce(int alpha, int beta, int color, int depth) {
     int score = evaluate(color);
     int bestscore = -30000;
     int movcount;
-    if (depth > 4) {
+    if (depth > 3) {
         return score;
     }
     if (checkers(color)) {
@@ -1366,7 +1366,7 @@ int quiesce(int alpha, int beta, int color, int depth) {
         }
         movcount = generatemoves(color, 1, maxdepth+depth);
     }
-    if (depth < 2) {
+    if (depth == 0) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
             int temp1 = 0;
@@ -1398,7 +1398,7 @@ int quiesce(int alpha, int beta, int color, int depth) {
     }
     return bestscore;
 }
-int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, int nodelimit, int timelimit) {
+int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool nmp, int nodelimit, int timelimit) {
     if (repetitions() > 1) {
         return 0;
     }
@@ -1474,10 +1474,18 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, int n
             j--;
         }
     }
+    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 4 && nmp)) {
+        makenullmove();
+        score = -alphabeta(depth-4, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
+        unmakenullmove();
+        if (score >= beta) {
+            return beta;
+        }
+    }
     for (int i = 0; i < movcount; i++) {
         if (!stopsearch) {
             makemove(moves[depth][i], true);
-            score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, nodelimit, timelimit);
+            score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
             unmakemove(moves[depth][i]);
             if (score > bestscore) {
                 if (score > alpha) {
@@ -1532,7 +1540,7 @@ void iterative(int nodelimit, int timelimit, int color) {
         int beta = score+delta;
         bool fail = true;
         while (fail) {
-            int score1 = alphabeta(depth, depth, alpha, beta, color, nodelimit, timelimit);
+            int score1 = alphabeta(depth, depth, alpha, beta, color, true, nodelimit, timelimit);
             if (score1 >= beta) {
                 beta += delta;
                 delta += delta;
@@ -1807,7 +1815,7 @@ void uci() {
         nodecount = 0;
         start = chrono::steady_clock::now();
         stopsearch = false;
-        int score = alphabeta(sum, sum, -29000, 29000, color, 1000000000, 120000);
+        int score = alphabeta(sum, sum, -29000, 29000, color, true, 1000000000, 120000);
         cout << "info depth " << sum << " nodes " << nodecount << " score cp " << score << " pv " << algebraic(bestmove) << "\n";
     }
     if (ucicommand.substr(0, 8) == "go perft") {
