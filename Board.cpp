@@ -1460,23 +1460,25 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             return 0;
         }
     }
-    for (int i = 0; i < movcount; i++) {
-        int j = i;
-        int temp1 = 0;
-        int temp2 = 0;
-        while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
-            temp1 = moves[depth][j];
-            temp2 = movescore[depth][j];
-            moves[depth][j] = moves[depth][j-1];
-            movescore[depth][j] = movescore[depth][j-1];
-            moves[depth][j-1] = temp1;
-            movescore[depth][j-1] = temp2;
-            j--;
+    if (depth > 1) {
+        for (int i = 0; i < movcount; i++) {
+            int j = i;
+            int temp1 = 0;
+            int temp2 = 0;
+            while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
+                temp1 = moves[depth][j];
+                temp2 = movescore[depth][j];
+                moves[depth][j] = moves[depth][j-1];
+                movescore[depth][j] = movescore[depth][j-1];
+                moves[depth][j-1] = temp1;
+                movescore[depth][j-1] = temp2;
+                j--;
+            }
         }
     }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 4 && nmp)) {
+    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 3 && nmp)) {
         makenullmove();
-        score = -alphabeta(depth-4, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
+        score = -alphabeta(depth-3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
         if (score >= beta) {
             return beta;
