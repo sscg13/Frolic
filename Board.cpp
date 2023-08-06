@@ -1101,80 +1101,21 @@ int evaluate(int color) {
     int e = (min(gamephase[0], gamephase[1]) == 0) ? 2 : 1;
     return (mideval*midphase+e*endeval*endphase)/24+bishops;
 }
-int quiesce(int alpha, int beta, int color, int depth) {
-    int score = evaluate(color);
-    int bestscore = -30000;
-    int movcount;
-    if (depth > 3) {
-        return score;
-    }
-    if (checkers(color)) {
-        movcount = generatemoves(color, 0, maxdepth+depth);
-        if (movcount == 0) {
-            return -27000;
-        }
-    }
-    else {
-        bestscore = score;
-        if (alpha < score) {
-            alpha = score;
-        }
-        if (score >= beta) {
-            return score;
-        }
-        movcount = generatemoves(color, 1, maxdepth+depth);
-    }
-    if (depth == 0) {
-        for (int i = 0; i < movcount; i++) {
-            int j = i;
-            int temp1 = 0;
-            int temp2 = 0;
-            while (j > 0 && movescore[maxdepth+depth][j] > movescore[maxdepth+depth][j-1]) {
-                temp1 = moves[maxdepth+depth][j];
-                temp2 = movescore[maxdepth+depth][j];
-                moves[maxdepth+depth][j] = moves[maxdepth+depth][j-1];
-                movescore[maxdepth+depth][j] = movescore[maxdepth+depth][j-1];
-                moves[maxdepth+depth][j-1] = temp1;
-                movescore[maxdepth+depth][j-1] = temp2;
-                j--;
-            }
-        }
-    }
-    for (int i = 0; i < movcount; i++) {
-        makemove(moves[maxdepth+depth][i], 1);
-        score = -quiesce(-beta, -alpha, color^1, depth+1);
-        unmakemove(moves[maxdepth+depth][i]);
-        if (score >= beta) {
-            return score;
-        }
-        if (score > alpha) {
-            alpha = score;
-        }
-        if (score > bestscore) {
-            bestscore = score;
-        }
-    }
-    return bestscore;
-}
 int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool nmp, int nodelimit, int timelimit) {
     if (repetitions() > 1) {
         return 0;
     }
     if (depth == 0) {
-        return quiesce(alpha, beta, color, 0);
+        return evaluate(color);
     }
     int score = -30000;
     int bestscore = -30000;
     if (Bitboards[color]&Bitboards[7]==0ULL) {
-        return -29000;
+        return -1*(depth+28000-initialdepth);
     }
     int allnode = 0;
     int movcount;
-    bool stillgen = true;
     int index = zobristhash%TTsize;
-    if ((index >= TTsize) || index < 0) {
-        index = 0;
-    }
     int ttmove = 0;
     int bestmove1 = -1;
     int ttdepth = TT[index].depth;
@@ -1185,15 +1126,6 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         ttmove = TT[index].hashmove;
         if (ttdepth >= depth) {
             int nodetype = TT[index].nodetype;
-            if (depth > 1) {
-                movcount = generatemoves(color, 0, depth);
-                stillgen = false;
-                for (int i = 0; i < movcount; i++)  {
-                    if (moves[depth][i] == ttmove) {
-                        movescore[depth][i] = 100000;
-                    }
-                }
-            }
             if (bestmove >= 0 && repetitions() == 0) {
                 if (nodetype == 3) {
                     return score;
@@ -1207,22 +1139,15 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if (stillgen) {
-        movcount = generatemoves(color, 0, depth);
-    }
-    if (movcount == 0) {
-        if (checkers(color)) {
-            return -1*(depth+28000-initialdepth);
-        }
-        else {
-            return 0;
-        }
-    }
+    movcount = generatemoves(color, depth);
     if (depth > 1) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
             int temp1 = 0;
             int temp2 = 0;
+            if (moves[depth][i] == ttmove) {
+                movescore[depth][i] = (1 << 20);
+            }
             while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
                 temp1 = moves[depth][j];
                 temp2 = movescore[depth][j];
@@ -1234,23 +1159,15 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 3 && nmp)) {
-        makenullmove();
-        score = -alphabeta(depth-3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
-        unmakenullmove();
-        if (score >= beta) {
-            return beta;
-        }
-    }
     for (int i = 0; i < movcount; i++) {
         if (!stopsearch) {
             makemove(moves[depth][i], true);
-            score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+            score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^(gamelength&1), true, nodelimit, timelimit);
             unmakemove(moves[depth][i]);
             if (score > bestscore) {
                 if (score > alpha) {
                     if (score >= beta) {
-                        if (update && !stopsearch && abs(score) < 29000) {
+                        if (update && !stopsearch && abs(score) < 30000) {
                             updatett(index, depth, score, 1, moves[depth][i]);
                         }
                         int target = (moves[depth][i]>>6)&63;
@@ -1270,7 +1187,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             if (nodecount > nodelimit) {
                 stopsearch = true;
             }
-            if (depth > 1) {
+            if (depth > 2) {
                 auto now = chrono::steady_clock::now();
                 auto timetaken = chrono::duration_cast<chrono::milliseconds>(now - start);
                 if (timetaken.count() > timelimit) {
@@ -1279,7 +1196,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if ((update && !stopsearch) && ((bestmove1 >= 0) && (abs(bestscore) < 29000))) {
+    if ((update && !stopsearch) && ((bestmove1 >= 0) && (abs(bestscore) < 30000))) {
         updatett(index, depth, bestscore, 2+allnode, moves[depth][bestmove1]);
     }
     return bestscore;
