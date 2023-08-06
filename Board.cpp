@@ -444,9 +444,9 @@ void makemove(int notation, bool reversible) {
     }
     position&=(0x00003FFF | (castlechange[from] << 14));
     position&=(0x00003FFF | (castlechange[to] << 14));
-    position^=1;
+    position^=(gamelength&1);
     position^=(halfmove << 1);
-    zobristhash^=colorhash;
+    zobristhash^=(colorhash*(gamelength&1));
     if (position & 0x00003F00) {
         int file = (position >> 8) & 7;
         zobristhash^=epfilehash[file];
@@ -1167,7 +1167,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             if (score > bestscore) {
                 if (score > alpha) {
                     if (score >= beta) {
-                        if (update && !stopsearch && abs(score) < 30000) {
+                        if (update && !stopsearch && abs(score) < 29000) {
                             updatett(index, depth, score, 1, moves[depth][i]);
                         }
                         int target = (moves[depth][i]>>6)&63;
@@ -1196,7 +1196,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if ((update && !stopsearch) && ((bestmove1 >= 0) && (abs(bestscore) < 30000))) {
+    if ((update && !stopsearch) && ((bestmove1 >= 0) && (abs(bestscore) < 29000))) {
         updatett(index, depth, bestscore, 2+allnode, moves[depth][bestmove1]);
     }
     return bestscore;
@@ -1234,39 +1234,8 @@ void iterative(int nodelimit, int timelimit, int color) {
         auto now = chrono::steady_clock::now();
         auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
         if (nodecount < nodelimit && timetaken.count() < timelimit && depth < maxdepth && bestmove >= 0) {
-            int last = depth;
-            int pvcolor = color;
-            bool stop = false;
-            for (int i = 0; i < depth; i++) {
-                int index = zobristhash%TTsize;
-                stop = true;
-                if (TT[index].key == zobristhash && TT[index].nodetype == 3) {
-                    int movcount = generatemoves(pvcolor, 0, 0);
-                    for (int j = 0; j < movcount; j++) {
-                        if (moves[0][j] == TT[index].hashmove) {
-                            stop = false;
-                        }
-                    }
-                }
-                if (stop) {
-                    last = i;
-                    i = depth;
-                }
-                else {
-                    pvcolor^=1;
-                    pvtable[i] = TT[index].hashmove;
-                    makemove(TT[index].hashmove, 1);
-                }
-            }
-            for (int i = last-1; i >= 0; i--) {
-                unmakemove(pvtable[i]);
-            }
             if (abs(score) <= 27000) {
-                cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score cp " << score << " pv ";
-                for (int i = 0; i < last; i++) {
-                    cout << algebraic(pvtable[i]) << " ";
-                }
-                cout << "\n";
+                cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score cp " << score << " pv " << algebraic(bestmove) << "\n";
             }
             else {
                 int matescore;
@@ -1276,11 +1245,7 @@ void iterative(int nodelimit, int timelimit, int color) {
                 else {
                     matescore = (-28000-score)/2;
                 }
-                cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score mate " << matescore << " pv ";
-                for (int i = 0; i < last; i++) {
-                    cout << algebraic(pvtable[i]) << " ";
-                }
-                cout << "\n";
+                cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score mate " << matescore << " pv " << algebraic(bestmove) << "\n";
             }
             depth++;
             bestmove1 = bestmove;
@@ -1313,13 +1278,27 @@ void uci() {
         initializett();
         initializeboard();
     }
+    if (ucicommand.substr(0, 8) == "makemove") {
+        string mov = ucicommand.substr(9, 5);
+        int color = position&1;
+        int len = generatemoves(color, 0);
+        int played = -1;
+        for (int i = 0; i < len; i++) {
+            if (algebraic(moves[0][i]) == mov) {
+                played = i;
+            }
+        }
+        if (played >= 0) {
+            makemove(moves[0][played], false);
+        }
+    }
     if (ucicommand.substr(0, 17) == "position startpos") {
         initializeboard();
         int color = 0;
         string mov = "";
         for (int i = 24; i <= ucicommand.length(); i++) {
             if ((ucicommand[i]==' ') || (i == ucicommand.length())) {
-                int len = generatemoves(color, 0, 0);
+                int len = generatemoves(color, 0);
                 int played = -1;
                 for (int j = 0; j < len; j++) {
                     if (algebraic(moves[0][j])==mov) {
@@ -1445,7 +1424,6 @@ void uci() {
         int color = position&1;
         if (color == 0) {
             iterative(1000000000, wtime/35+winc/3, 0);
-
         }
         else {
             iterative(1000000000, btime/35+binc/3, 1);
