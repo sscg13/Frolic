@@ -1036,8 +1036,9 @@ int evaluate(int color) {
     int mideval = evalm[color]-evalm[color^1];
     int endeval = evale[color]-evale[color^1];
     int bishops = 37*(popcount(Bitboards[color]&Bitboards[4])/2-popcount(Bitboards[color^1]&Bitboards[4])/2);
+    int tempo = (gamelength%2 == 1) ? 200 : 0;
     int e = (min(gamephase[0], gamephase[1]) == 0) ? 2 : 1;
-    return (mideval*midphase+e*endeval*endphase)/24+bishops;
+    return (mideval*midphase+e*endeval*endphase)/24+bishops+tempo;
 }
 int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool nmp, int nodelimit, int timelimit) {
     if (repetitions() > 1) {
@@ -1062,7 +1063,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
-        if (ttdepth >= depth) {
+        if (ttdepth == depth) {
             int nodetype = TT[index].nodetype;
             if (bestmove >= 0 && repetitions() == 0) {
                 if (nodetype == 3) {
@@ -1155,25 +1156,7 @@ void iterative(int nodelimit, int timelimit, int color) {
     resethistory();
     while (!stopsearch) {
         bestmove = -1;
-        int delta = 30;
-        int alpha = score-delta;
-        int beta = score+delta;
-        bool fail = true;
-        while (fail) {
-            int score1 = alphabeta(depth, depth, alpha, beta, color, true, nodelimit, timelimit);
-            if (score1 >= beta) {
-                beta += delta;
-                delta += delta;
-            }
-            else if (score1 <= alpha) {
-                alpha -= delta;
-                delta += delta;
-            }
-            else {
-                score = score1;
-                fail = false;
-            }
-        }
+        score = alphabeta(depth, depth, -29000, 29000, color, 1, nodelimit, timelimit);
         auto now = chrono::steady_clock::now();
         auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
         if (nodecount < nodelimit && timetaken.count() < timelimit && depth < maxdepth && bestmove >= 0) {
