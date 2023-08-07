@@ -554,7 +554,7 @@ int generatemoves(int color, int depth) {
         notation |= (color << 12);
         notation |= (7 << 13);
         int captured = 0;
-        for (int j = 2; j < 7; j++) {
+        for (int j = 2; j < 8; j++) {
             if ((1ULL << capturesquare)&(Bitboards[opposite]&Bitboards[j])) {
                 captured = j;
             }
@@ -606,7 +606,7 @@ int generatemoves(int color, int depth) {
             notation |= (color << 12);
             notation |= (2 << 13);
             int captured = 0;
-            for (int j = 2; j < 7; j++) {
+            for (int j = 2; j < 8; j++) {
                 if ((1ULL << capturesquare)&(Bitboards[opposite]&Bitboards[j])) {
                     captured = j;
                 }
@@ -669,7 +669,7 @@ int generatemoves(int color, int depth) {
             notation |= (color << 12);
             notation |= (3 << 13);
             int captured = 0;
-            for (int j = 2; j < 7; j++) {
+            for (int j = 2; j < 8; j++) {
                 if ((1ULL << capturesquare)&(Bitboards[opposite]&Bitboards[j])) {
                     captured = j;
                 }
@@ -706,7 +706,7 @@ int generatemoves(int color, int depth) {
             notation |= (color << 12);
             notation |= (4 << 13);
             int captured = 0;
-            for (int j = 2; j < 7; j++) {
+            for (int j = 2; j < 8; j++) {
                 if ((1ULL << capturesquare)&(Bitboards[opposite]&Bitboards[j])) {
                     captured = j;
                 }
@@ -743,7 +743,7 @@ int generatemoves(int color, int depth) {
             notation |= (color << 12);
             notation |= (5 << 13);
             int captured = 0;
-            for (int j = 2; j < 7; j++) {
+            for (int j = 2; j < 8; j++) {
                 if ((1ULL << capturesquare)&(Bitboards[opposite]&Bitboards[j])) {
                     captured = j;
                 }
@@ -773,7 +773,6 @@ int generatemoves(int color, int depth) {
         int queensquare = popcount((ourqueens & -ourqueens)-1);
         ourmask = (GetRankAttacks(preoccupied, queensquare)|FileAttacks(preoccupied, queensquare));
         ourmask |= (DiagAttacks(preoccupied, queensquare)|AntiAttacks(preoccupied, queensquare));
-        ourmask &= (pinmask&checkmask);
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
         for (int j = 0; j < capturenumber; j++) {
@@ -782,7 +781,7 @@ int generatemoves(int color, int depth) {
             notation |= (color << 12);
             notation |= (6 << 13);
             int captured = 0;
-            for (int j = 2; j < 7; j++) {
+            for (int j = 2; j < 8; j++) {
                 if ((1ULL << capturesquare)&(Bitboards[opposite]&Bitboards[j])) {
                     captured = j;
                 }
@@ -809,7 +808,7 @@ int generatemoves(int color, int depth) {
         ourqueens^=(1ULL << queensquare);
     }
     if (position&(1 << (14+2*color))) {
-        if (!((opponentattacks|occupied)&((1ULL << (kingsquare+3))-(1ULL << kingsquare)))) {
+        if (!((occupied)&((1ULL << (kingsquare+3))-(1ULL << kingsquare)))) {
             int notation = kingsquare | ((kingsquare+2) << 6);
             notation |= (color << 12);
             notation |= (7 << 13);
@@ -820,7 +819,7 @@ int generatemoves(int color, int depth) {
         }
     }
     if (position&(1 << (15+2*color))) {
-        if (!(((opponentattacks)&((1ULL << (kingsquare+1))-(1ULL << (kingsquare-2))))||(occupied&((1ULL << kingsquare)-(1ULL << (kingsquare-3)))))) {
+        if (!(occupied&((1ULL << kingsquare)-(1ULL << (kingsquare-3))))) {
             int notation = kingsquare | ((kingsquare-2) << 6);
             notation |= (color << 12);
             notation |= (7 << 13);
@@ -853,67 +852,6 @@ string algebraic(int notation) {
         }
     }
     return header;
-}
-U64 perft(int depth, int initialdepth, int color) {
-    int movcount = generatemoves(color, 0, depth);
-    U64 ans = 0;
-    if (depth > 1) {
-        for (int i = 0; i < movcount; i++) {
-            makemove(moves[depth][i], true);
-            if (depth == initialdepth) {
-                cout << algebraic(moves[depth][i]);
-                cout << ": ";
-            }
-            ans+=perft(depth-1, initialdepth, color^1);
-            unmakemove(moves[depth][i]);
-        }
-        if (depth == initialdepth-1) {
-            cout << ans << " ";
-        }
-        if (depth == initialdepth) {
-            cout << "\n" << ans << "\n";
-            auto finish = chrono::steady_clock::now();
-            auto diff = chrono::duration_cast<chrono::milliseconds>(finish-start);
-            int nps = 1000*(ans/diff.count());
-            cout << "nps " << nps << "\n";
-        }
-        return ans;
-    }
-    else {
-        if (initialdepth == 2) {
-            cout << movcount << " ";
-        }
-        return movcount;
-    }
-}
-U64 perftnobulk(int depth, int initialdepth, int color) {
-    int movcount = generatemoves(color, 0, depth);
-    U64 ans = 0;
-    for (int i = 0; i < movcount; i++) {
-        makemove(moves[depth][i], true);
-        if (depth == initialdepth) {
-            cout << algebraic(moves[depth][i]);
-            cout << ": ";
-        }
-        if (depth>1) {
-            ans+=perftnobulk(depth-1, initialdepth, color^1);
-        }
-        else {
-            ans++;
-        }
-        unmakemove(moves[depth][i]);
-    }
-    if (depth == initialdepth-1) {
-        cout << ans << " ";
-    }
-    if (depth == initialdepth) {
-        cout << "\n" << ans << "\n";
-        auto finish = chrono::steady_clock::now();
-        auto diff = chrono::duration_cast<chrono::milliseconds>(finish-start);
-        int nps = 1000*(ans/diff.count());
-        cout << "nps " << nps << "\n";
-    }
-    return ans;
 }
 void parseFEN(string FEN) {
     gamelength = 0;
@@ -1105,13 +1043,13 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (repetitions() > 1) {
         return 0;
     }
-    if (depth == 0) {
-        return evaluate(color);
-    }
     int score = -30000;
     int bestscore = -30000;
-    if (Bitboards[color]&Bitboards[7]==0ULL) {
+    if ((Bitboards[color]&Bitboards[7])==0ULL) {
         return -1*(depth+28000-initialdepth);
+    }
+    if (depth == 0) {
+        return evaluate(color);
     }
     int allnode = 0;
     int movcount;
@@ -1162,7 +1100,12 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     for (int i = 0; i < movcount; i++) {
         if (!stopsearch) {
             makemove(moves[depth][i], true);
-            score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^(gamelength&1), true, nodelimit, timelimit);
+            if (gamelength&1) {
+                score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+            }
+            else {
+                score = alphabeta(depth-1, initialdepth, alpha, beta, color, true, nodelimit, timelimit);
+            }
             unmakemove(moves[depth][i]);
             if (score > bestscore) {
                 if (score > alpha) {
@@ -1327,7 +1270,7 @@ void uci() {
         string mov = "";
         for (int i = reader+6; i <= ucicommand.length(); i++) {
             if ((ucicommand[i]==' ') || (i == ucicommand.length())) {
-                int len = generatemoves(color, 0, 0);
+                int len = generatemoves(color, 0);
                 int played = -1;
                 for (int j = 0; j < len; j++) {
                     if (algebraic(moves[0][j])==mov) {
@@ -1472,32 +1415,6 @@ void uci() {
         stopsearch = false;
         int score = alphabeta(sum, sum, -29000, 29000, color, true, 1000000000, 120000);
         cout << "info depth " << sum << " nodes " << nodecount << " score cp " << score << " pv " << algebraic(bestmove) << "\n";
-    }
-    if (ucicommand.substr(0, 8) == "go perft") {
-        start = chrono::steady_clock::now();
-        int color = position&1;
-        int sum = 0;
-        int add = 1;
-        int reader = ucicommand.length()-1;
-        while (ucicommand[reader] != ' ') {
-            sum+=((int)(ucicommand[reader]-48))*add;
-            add*=10;
-            reader--;
-        }
-        perft(sum, sum, color);
-    }
-    if (ucicommand.substr(0, 9) == "go sperft") {
-        start = chrono::steady_clock::now();
-        int color = position&1;
-        int sum = 0;
-        int add = 1;
-        int reader = ucicommand.length()-1;
-        while (ucicommand[reader] != ' ') {
-            sum+=((int)(ucicommand[reader]-48))*add;
-            add*=10;
-            reader--;
-        }
-        perftnobulk(sum, sum, color);
     }
     if (ucicommand == "hash") {
         cout << zobristhash << "\n";
