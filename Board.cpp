@@ -1,11 +1,10 @@
 #include <iostream>
-#include <cstdlib>
 #include <time.h>
 #include <bit>
 #include <random>
 #include <string>
 #include <chrono>
-#include <thread>
+#include <fstream>
 using U64 = uint64_t;
 using namespace std;
 
@@ -72,15 +71,17 @@ int evale[2] = {0, 0};
 int nodecount = 0;
 int bestmove = 0;
 U64 zobristhash = 0ULL;
+bool randomeval = false;
 bool stopsearch = false;
+bool suppressoutput = false;
 //1 bit color, 7 bits halfmove, 6 bits ep, 4 bits castling KQkq
 //6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit castling, 1 bit double pawn push,
 //1 bit en passant, 1 bit promotion, 2 bits promoted piece, 1 bit capture, 3 bits piece captured
 //26 bits total for now?
 int movecount;
 auto start = chrono::steady_clock::now();
-int materialm[6] = {82, 337, 365, 477, 1025, 20000};
-int materiale[6] = {94, 281, 297, 512, 936, 20000};
+int materialm[6] = {82, 337, 365, 477, 735, 20000};
+int materiale[6] = {94, 371, 347, 652, 1036, 20000};
 int pstm[6][64] = {{0,0,0,0,0,0,0,0,-35,-1,-20,-23,-15,24,38,-22,-26,-4,-4,-10,3,3,33,-12,-27,-2,-5,12,17,6,10,-25,
 -14,13,6,21,23,12,17,-23,-6,7,26,31,65,56,25,-20,98,134,61,95,68,126,34,-11,0,0,0,0,0,0,0,0},
 {-105,-21,-58,-33,-17,-28,-19,-23,-29,-53,-12,-3,-1,18,-14,-19,-23,-9,12,10,19,17,25,-16,-13,4,16,13,28,19,21,-8,
@@ -111,6 +112,7 @@ int historytable[2][6][64];
 int startpiece[16] = {3, 1, 2, 4, 5, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0};
 int phase[6] = {0, 1, 1, 2, 4, 0};
 int gamephase[2] = {0, 0};
+ofstream gameoutput;
 struct TTentry {
     U64 key;
     int score;
@@ -294,7 +296,15 @@ void updatett(int index, int depth, int score, int nodetype, int hashmove) {
         TT[index].score = score;
     }
 }
-void resethistory() {
+void clearhistory() {
+    for (int i = 0; i < 6; i++) {
+        for (int j = 0; j < 64; j++) {
+            historytable[0][i][j] = 0;
+            historytable[1][i][j] = 0;
+        }
+    }
+}
+void dampenhistory() {
     for (int i = 0; i < 6; i++) {
         for (int j = 0; j < 64; j++) {
             historytable[0][i][j] /= 2;
@@ -1030,15 +1040,56 @@ void parseFEN(string FEN) {
     zobrist[0] = zobristhash;
     history[0] = position;
 }
+int getkingsafety(int color) {
+    int king = popcount((Bitboards[7]&Bitboards[color])-1);
+    U64 occupied = (Bitboards[0]|Bitboards[1]);
+    int diag = ((Bitboards[4]|Bitboards[6])&Bitboards[color^1]) ? 1+popcount(DiagAttacks(occupied, king))/2 : 1;
+    int anti = ((Bitboards[4]|Bitboards[6])&Bitboards[color^1]) ? 1+popcount(AntiAttacks(occupied, king))/2 : 1;
+    int rnk = ((Bitboards[5]|Bitboards[6])&Bitboards[color^1]) ? 1+popcount(GetRankAttacks(occupied, king))/2 : 1;
+    int file = ((Bitboards[5]|Bitboards[6])&Bitboards[color^1]) ? 1+popcount(FileAttacks(occupied, king))/2 : 1;
+    int knight = (Bitboards[2]&Bitboards[color^1]) ? 1+popcount(KnightAttacks[king])/2 : 1;
+    return diag*anti*rnk*file*knight;
+}
+int rookfile(int color) {
+    U64 ourrooks = Bitboards[color]&Bitboards[5];
+    U64 theirrooks = Bitboards[color^1]&Bitboards[5];
+    int score = 0;
+    while (ourrooks) {
+        int rookposition = popcount((ourrooks & -ourrooks)-1);
+        if ((Files[rookposition&7]&Bitboards[2]&Bitboards[color]) == 0ULL) {
+            if ((Files[rookposition&7]&Bitboards[2]) == 0ULL) {
+                score+=130;
+            }
+            score+=53;
+        }
+        ourrooks^=(1ULL << rookposition);
+    }
+    while (theirrooks) {
+        int rookposition = popcount((theirrooks & -theirrooks)-1);
+        if ((Files[rookposition&7]&Bitboards[2]&Bitboards[color^1]) == 0ULL) {
+            if ((Files[rookposition&7]&Bitboards[2]) == 0ULL) {
+                score-=130;
+            }
+            score-=53;
+        }
+        theirrooks^=(1ULL << rookposition);
+    }
+    return score;
+}
 int evaluate(int color) {
     int midphase = min(24, gamephase[0]+gamephase[1]);
     int endphase = 24-midphase;
     int mideval = evalm[color]-evalm[color^1];
+    int kingsafety = getkingsafety(color^1)-getkingsafety(color);
+    int rooks = rookfile(color)-rookfile(color^1);
     int endeval = evale[color]-evale[color^1];
     int bishops = 37*(popcount(Bitboards[color]&Bitboards[4])/2-popcount(Bitboards[color^1]&Bitboards[4])/2);
-    int tempo = (gamelength%2 == 1) ? 200 : 0;
+    int tempo = (gamelength&1) ? 150 : 0;
     int e = (min(gamephase[0], gamephase[1]) == 0) ? 2 : 1;
-    return (mideval*midphase+e*endeval*endphase)/24+bishops+tempo;
+    int random = randomeval ? rand()&15 : 0;
+    int base = (mideval*midphase+e*endeval*endphase)/24;
+    int extra = bishops+tempo+kingsafety+random+rooks;
+    return base+extra;
 }
 int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool nmp, int nodelimit, int timelimit) {
     if (repetitions() > 1) {
@@ -1153,25 +1204,18 @@ void iterative(int nodelimit, int timelimit, int color) {
     int depth = 1;
     int bestmove1 = 0;
     int pvtable[maxdepth];
-    resethistory();
+    dampenhistory();
     while (!stopsearch) {
         bestmove = -1;
         score = alphabeta(depth, depth, -29000, 29000, color, 1, nodelimit, timelimit);
         auto now = chrono::steady_clock::now();
         auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
-        if (nodecount < nodelimit && timetaken.count() < timelimit && depth < maxdepth && bestmove >= 0) {
-            if (abs(score) <= 27000) {
+        if (!stopsearch && depth < maxdepth) {
+            if (!suppressoutput) {
                 cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score cp " << score << " pv " << algebraic(bestmove) << "\n";
             }
-            else {
-                int matescore;
-                if (score > 0) {
-                    matescore = 1+(28000-score)/2;
-                }
-                else {
-                    matescore = (-28000-score)/2;
-                }
-                cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score mate " << matescore << " pv " << algebraic(bestmove) << "\n";
+            if (abs(score) > 27000) {
+                stopsearch = true;
             }
             depth++;
             bestmove1 = bestmove;
@@ -1184,9 +1228,55 @@ void iterative(int nodelimit, int timelimit, int color) {
     auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
     if (timetaken.count() > 0) {
         int nps = 1000*(nodecount/timetaken.count());
-        cout << "info nodes " << nodecount << " nps " << nps << "\n";
+        if (!suppressoutput) {
+            cout << "info nodes " << nodecount << " nps " << nps << "\n";
+        }
     }
-    cout << "bestmove " << algebraic(bestmove1) << "\n";
+    bestmove = bestmove1;
+    if (!suppressoutput) {
+        cout << "bestmove " << algebraic(bestmove1) << "\n";
+    }
+}
+void autoplay(int nodes) {
+    randomeval = true;
+    suppressoutput = true;
+    initializett();
+    clearhistory();
+    initializeboard();
+    int rand1 = rand()%20;
+    int rand2 = rand()%20;
+    generatemoves(0, 0);
+    string game = "";
+    makemove(moves[0][rand1], 0);
+    game += algebraic(moves[0][rand1]);
+    game += " ";
+    generatemoves(1, 0);
+    makemove(moves[0][rand2], 0);
+    game += algebraic(moves[0][rand2]);
+    game += " ";
+    while (popcount(Bitboards[7]) > 1 && repetitions() < 2 && popcount(Bitboards[0]|Bitboards[1]) > 3) {
+        int color = position&1;
+        iterative(nodes, 120000, color);
+        makemove(bestmove, 0);
+        game = game + algebraic(bestmove);
+        game+=" ";
+    }
+    if (popcount(Bitboards[7]) > 1) {
+        game+="d";
+    }
+    else if (Bitboards[7]&Bitboards[1]) {
+        game+="b";
+    }
+    else {
+        game+="w";
+    }
+    cout << game << "\n";
+    gameoutput << game << "\n";
+    suppressoutput = false;
+    randomeval = false;
+    initializett();
+    clearhistory();
+    initializeboard();
 }
 void uci() {
     string ucicommand;
@@ -1195,6 +1285,7 @@ void uci() {
         cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "uciok\n";
     }
     if (ucicommand == "quit") {
+        gameoutput.close();
         exit(0);
     }
     if (ucicommand == "isready") {
@@ -1202,6 +1293,7 @@ void uci() {
     }
     if (ucicommand == "ucinewgame") {
         initializett();
+        clearhistory();
         initializeboard();
     }
     if (ucicommand.substr(0, 8) == "makemove") {
@@ -1271,89 +1363,9 @@ void uci() {
             }
         }
     }
-    if (ucicommand.substr(0, 8) == "go wtime") {
-        int wtime;
-        int btime;
-        int winc = 0;
-        int binc = 0;
-        int sum;
-        int add;
-        int reader = 8;
-        while (ucicommand[reader] != 'b') {
-            reader++;
-        }
-        reader--;
-        while (ucicommand[reader] == ' ') {
-            reader--;
-        }
-        sum = 0;
-        add = 1;
-        while (ucicommand[reader] != ' ') {
-            sum+=((int)(ucicommand[reader]-48))*add;
-            add*=10;
-            reader--;
-        }
-        if (sum < 100) {
-            sum = 100;
-        }
-        wtime = sum;
-        while (ucicommand[reader] != 'w' && reader < ucicommand.length()) {
-            reader++;
-        }
-        reader--;
-        while (ucicommand[reader] == ' ') {
-            reader--;
-        }
-        sum = 0;
-        add = 1;
-        while (ucicommand[reader] != ' ') {
-            sum+=((int)(ucicommand[reader]-48))*add;
-            add*=10;
-            reader--;
-        }
-        if (sum < 100) {
-            sum = 100;
-        }
-        btime = sum;
-        while (ucicommand[reader] != 'b' && reader < ucicommand.length()) {
-            reader++;
-        }
-        reader--;
-        while (ucicommand[reader] == ' ') {
-            reader--;
-        }
-        if (reader < ucicommand.length()-1) {
-            sum = 0;
-            add = 1;
-            while (ucicommand[reader] != ' ') {
-                sum+=((int)(ucicommand[reader]-48))*add;
-                add*=10;
-                reader--;
-            }
-            winc = sum;
-            while (ucicommand[reader] != 'b') {
-                reader++;
-            }
-            reader--;
-            while (ucicommand[reader] != ' ') {
-                reader--;
-            }
-            sum = 0;
-            add = 1;
-            while (ucicommand[reader] != ' ') {
-                sum+=((int)(ucicommand[reader]-48))*add;
-                add*=10;
-                reader--;
-            }
-            binc = sum;
-        }
+    if (ucicommand == "eval") {
         int color = position&1;
-        if (color == 0) {
-            iterative(1000000000, wtime/35+winc/3, 0);
-        }
-        else {
-            iterative(1000000000, btime/35+binc/3, 1);
-        }
+        cout << evaluate(color) << "\n";
     }
     if (ucicommand.substr(0, 11) == "go movetime") {
         int sum = 0;
@@ -1379,11 +1391,7 @@ void uci() {
         int color = position&1;
         iterative(sum, 120000, color);
     }
-    if (ucicommand.substr(0, 11) == "go infinite") {
-        int color = position&1;
-        iterative(1000000000, 120000, color);
-    }
-    if (ucicommand.substr(0, 12) == "go alphabeta") {
+    if (ucicommand.substr(0, 8) == "autoplay") {
         int sum = 0;
         int add = 1;
         int reader = ucicommand.length()-1;
@@ -1392,20 +1400,20 @@ void uci() {
             add*=10;
             reader--;
         }
-        int color = position&1;
-        nodecount = 0;
-        start = chrono::steady_clock::now();
-        stopsearch = false;
-        int score = alphabeta(sum, sum, -29000, 29000, color, true, 1000000000, 120000);
-        cout << "info depth " << sum << " nodes " << nodecount << " score cp " << score << " pv " << algebraic(bestmove) << "\n";
+        autoplay(sum);
     }
-    if (ucicommand == "hash") {
-        cout << zobristhash << "\n";
-    }
-    if (ucicommand == "querytt") {
-        int index = zobristhash%TTsize;
-        cout << "TTkey: " << TT[index].key << "\n";
-        cout << "TTscore: " << TT[index].score << "\n";
+    if (ucicommand.substr(0, 8) == "generate") {
+        int sum = 0;
+        int add = 1;
+        int reader = ucicommand.length()-1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        for (int i = 0; i < sum; i++) {
+            autoplay(30000);
+        }
     }
 }
 int main() {
@@ -1416,6 +1424,7 @@ int main() {
     initializezobrist();
     initializett();
     srand(time(0));
+    gameoutput.open("doublemove data.txt", ofstream::app);
     while (true) {
         uci();
     }
