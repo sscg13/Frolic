@@ -1412,11 +1412,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     int allnode = 0;
     int movcount;
-    bool stillgen = true;
     int index = zobristhash%TTsize;
-    if ((index >= TTsize) || index < 0) {
-        index = 0;
-    }
     int ttmove = 0;
     int bestmove1 = -1;
     int ttdepth = TT[index].depth;
@@ -1427,15 +1423,6 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         ttmove = TT[index].hashmove;
         if (ttdepth >= depth) {
             int nodetype = TT[index].nodetype;
-            if (depth > 1) {
-                movcount = generatemoves(color, 0, depth);
-                stillgen = false;
-                for (int i = 0; i < movcount; i++)  {
-                    if (moves[depth][i] == ttmove) {
-                        movescore[depth][i] = 100000;
-                    }
-                }
-            }
             if (bestmove >= 0 && repetitions() == 0) {
                 if (nodetype == 3) {
                     return score;
@@ -1449,9 +1436,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if (stillgen) {
-        movcount = generatemoves(color, 0, depth);
-    }
+    movcount = generatemoves(color, 0, depth);
     if (movcount == 0) {
         if (checkers(color)) {
             return -1*(depth+28000-initialdepth);
@@ -1465,6 +1450,9 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             int j = i;
             int temp1 = 0;
             int temp2 = 0;
+            if (moves[depth][i] == ttmove) {
+                movescore[depth][i] = (1 << 20);
+            }
             while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
                 temp1 = moves[depth][j];
                 temp2 = movescore[depth][j];
@@ -1476,7 +1464,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 3 && nmp)) {
+    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 3 && depth < initialdepth) && nmp) {
         makenullmove();
         score = -alphabeta(depth-3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
@@ -1485,9 +1473,18 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         }
     }
     for (int i = 0; i < movcount; i++) {
+        bool nullwindow = (i > 0);
         if (!stopsearch) {
             makemove(moves[depth][i], true);
-            score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+            if (nullwindow) {
+                score = -alphabeta(depth-1, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
+                if (score > alpha && score < beta) {
+                    score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+                }
+            }
+            else {
+                score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+            }
             unmakemove(moves[depth][i]);
             if (score > bestscore) {
                 if (score > alpha) {
