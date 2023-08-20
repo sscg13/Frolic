@@ -5,7 +5,6 @@
 #include <random>
 #include <string>
 #include <chrono>
-#include <thread>
 using U64 = uint64_t;
 using namespace std;
 
@@ -72,6 +71,9 @@ int evale[2] = {0, 0};
 int nodecount = 0;
 int bestmove = 0;
 U64 zobristhash = 0ULL;
+int movetime = 0;
+string proto = "uci";
+bool gosent = false;
 bool stopsearch = false;
 //1 bit color, 7 bits halfmove, 6 bits ep, 4 bits castling KQkq
 //6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit castling, 1 bit double pawn push,
@@ -1583,23 +1585,32 @@ void iterative(int nodelimit, int timelimit, int color) {
             for (int i = last-1; i >= 0; i--) {
                 unmakemove(pvtable[i]);
             }
-            if (abs(score) <= 27000) {
-                cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score cp " << score << " pv ";
-                for (int i = 0; i < last; i++) {
-                    cout << algebraic(pvtable[i]) << " ";
-                }
-                cout << "\n";
-            }
-            else {
-                int matescore;
-                if (score > 0) {
-                    matescore = 1+(28000-score)/2;
+            if (proto == "uci") {
+                if (abs(score) <= 27000) {
+                    cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score cp " << score << " pv ";
+                    for (int i = 0; i < last; i++) {
+                        cout << algebraic(pvtable[i]) << " ";
+                    }
+                    cout << "\n";
                 }
                 else {
-                    matescore = (-28000-score)/2;
+                    int matescore;
+                    if (score > 0) {
+                        matescore = 1+(28000-score)/2;
+                    }
+                    else {
+                        matescore = (-28000-score)/2;
+                    }
+                    cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score mate " << matescore << " pv ";
+                    for (int i = 0; i < last; i++) {
+                        cout << algebraic(pvtable[i]) << " ";
+                    }
+                    cout << "\n";
                 }
-                cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score mate " << matescore << " pv ";
-                for (int i = 0; i < last; i++) {
+            }
+            if (proto == "xboard") {
+                cout << depth << " " << score << " " << timetaken.count()/10 << " " << nodecount << " ";
+                for (int i=0; i < last; i++) {
                     cout << algebraic(pvtable[i]) << " ";
                 }
                 cout << "\n";
@@ -1613,11 +1624,17 @@ void iterative(int nodelimit, int timelimit, int color) {
     }
     auto now = chrono::steady_clock::now();
     auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
-    if (timetaken.count() > 0) {
+    if (timetaken.count() > 0 && proto == "uci") {
         int nps = 1000*(nodecount/timetaken.count());
         cout << "info nodes " << nodecount << " nps " << nps << "\n";
     }
-    cout << "bestmove " << algebraic(bestmove1) << "\n";
+    if (proto == "uci") {
+        cout << "bestmove " << algebraic(bestmove1) << "\n";
+    }
+    if (proto == "xboard") {
+        cout << "move " << algebraic(bestmove1) << "\n";
+        makemove(bestmove1, 0);
+    }
 }
 void uci() {
     string ucicommand;
@@ -1852,6 +1869,112 @@ void uci() {
         cout << "TTscore: " << TT[index].score << "\n";
     }
 }
+void xboard() {
+    string xcommand;
+    getline(cin, xcommand);
+    if (xcommand.substr(0, 8) == "protover") {
+        cout << "feature ping=1 setboard=1 analyze=0 sigint=0 sigterm=0 myname=\"sscg13 engine\" variants=\"normal\" done=1\n";
+    }
+    if (xcommand == "new") {
+        initializett();
+        initializeboard();
+    }
+    if (xcommand.substr(0, 8) == "setboard") {
+        string fen = xcommand.substr(9, xcommand.length()-9);
+        parseFEN(fen);
+    }
+    if (xcommand.substr(0, 4) == "time") {
+        int reader = 5;
+        while ('0' <= xcommand[reader] && xcommand[reader] <= '9') {
+            reader++;
+        }
+        reader--;
+        int sum = 0;
+        int add = 10;
+        while (xcommand[reader] != ' ') {
+            sum+=((int)(xcommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        movetime = sum/29;
+    }
+    if (xcommand.substr(0, 7) == "level 0") {
+        int reader = 8;
+        int sum1 = 0;
+        int sum2 = 0;
+        movetime = 0;
+        int add = 60000;
+        while ((xcommand[reader] != ' ') && (xcommand[reader] != ':')) {
+            reader++;
+        }
+        int save = reader;
+        reader--;
+        while (xcommand[reader] != ' ') {
+            sum1+=((int)(xcommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        add = 10000;
+        reader = save+1;
+        if (xcommand[save] == ':') {
+            while (xcommand[reader] != ' ') {
+                sum1+=((int)(xcommand[reader]-48))*add;
+                add/=10;
+                reader++;
+            }
+        }
+        add = 1000;
+        bool incenti = false;
+        reader = xcommand.length()-1;
+        while (xcommand[reader] != ' ') {
+            if (xcommand[reader] >= '0') {
+                sum2+=((int)xcommand[reader]-48)*add;
+                add*=10;
+            }
+            if (xcommand[reader] == '.') {
+                incenti = true;
+            }
+            reader--;
+        }
+        if (incenti) {
+            sum2/=100;
+        }
+        movetime = sum1/35+sum2/3;
+    }
+    if (xcommand.substr(0, 4) == "ping") {
+        int sum = 0;
+        int add = 1;
+        int reader = xcommand.length()-1;
+        while (xcommand[reader] != ' ') {
+            sum+=((int)(xcommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        cout << "pong " << sum << "\n";
+    }
+    if ((xcommand.length() == 4) || (xcommand.length() == 5)) {
+        int color = position&1;
+        int len = generatemoves(color, 0, 0);
+        int played = -1;
+        for (int j = 0; j < len; j++) {
+            if (algebraic(moves[0][j])==xcommand) {
+                played = j;
+            }
+        }
+        if (played >= 0) {
+            makemove(moves[0][played], false);
+            if (gosent) {
+                int color = position&1;
+                iterative(1000000000, movetime, color);
+            }
+        }
+    }
+    if (xcommand == "go") {
+        int color = position&1;
+        iterative(1000000000, movetime, color);
+        gosent = true;
+    }
+}
 int main() {
     initializeleaperattacks();
     initializemasks();
@@ -1860,8 +1983,17 @@ int main() {
     initializezobrist();
     initializett();
     srand(time(0));
-    while (true) {
-        uci();
+    getline(cin, proto);
+    if (proto == "uci") {
+        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "uciok\n";
+        while (true) {
+            uci();
+        }
+    }
+    if (proto == "xboard") {
+        while (true) {
+            xboard();
+        }
     }
     return 0;
 }
