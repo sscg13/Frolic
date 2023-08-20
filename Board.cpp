@@ -686,7 +686,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
         notation |= (1 << 16);
         notation |= (captured << 17);
         moves[depth][movecount] = notation;
-        movescore[depth][movecount] = 3000+100*captured+historytable[color][5][capturesquare];
+        movescore[depth][movecount] = 300+1000*captured+historytable[color][5][capturesquare];
         movecount++;
         ourcaptures^=(1ULL << capturesquare);
     }
@@ -783,13 +783,13 @@ int generatemoves(int color, bool capturesonly, int depth) {
             if (((color==0)&&(capturesquare&56)==56)||((color==1)&&(capturesquare&56)==0)) {
                 for (int k = 0; k < 4; k++) {
                     moves[depth][movecount]=notation|((1 << 20)|(k << 21));
-                    movescore[depth][movecount] = 9000+captured*100+historytable[color][0][capturesquare];
+                    movescore[depth][movecount] = 1000+captured*1000+historytable[color][0][capturesquare];
                     movecount++;
                 }
             }
             else if (legal) {
                 moves[depth][movecount] = notation;
-                movescore[depth][movecount] = 8000+captured*100+historytable[color][0][capturesquare];
+                movescore[depth][movecount] = 800+captured*1000+historytable[color][0][capturesquare];
                 movecount++;
             }
             ourcaptures^=(1ULL << capturesquare);
@@ -809,7 +809,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
                 if (((color==0)&&(movesquare&56)==56)||((color==1)&&(movesquare&56)==0)) {
                     for (int k = 0; k < 4; k++) {
                         moves[depth][movecount]=notation|((1 << 20)|(k << 21));
-                        movescore[depth][movecount] = 9000+historytable[color][0][movesquare];
+                        movescore[depth][movecount] = 2000+historytable[color][0][movesquare];
                         movecount++;
                     }
                 }
@@ -860,7 +860,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 7000+captured*100+historytable[color][1][capturesquare];
+            movescore[depth][movecount] = 700+captured*1000+historytable[color][1][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
@@ -917,7 +917,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 6000+captured*100+historytable[color][2][capturesquare];
+            movescore[depth][movecount] = 600+captured*1000+historytable[color][2][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
@@ -974,7 +974,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 5000+captured*100+historytable[color][3][capturesquare];
+            movescore[depth][movecount] = 500+captured*1000+historytable[color][3][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
@@ -1032,7 +1032,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 4000+captured*100+historytable[color][4][capturesquare];
+            movescore[depth][movecount] = 400+captured*1000+historytable[color][4][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
