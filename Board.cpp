@@ -65,6 +65,7 @@ int root = 0;
 int moves[64][256];
 int movescore[64][256];
 int maxdepth = 32;
+int killers[32][2];
 int position = 0;
 int evalm[2] = {0, 0};
 int evale[2] = {0, 0};
@@ -322,6 +323,10 @@ void initializeboard() {
     for (int i = 0; i < 16; i++) {
         startpstm+=pstm[startpiece[i]][i];
         startpste+=pste[startpiece[i]][i];
+    }
+    for (int i = 0; i < 32; i++) {
+        killers[i][0] = 0;
+        killers[i][1] = 0;
     }
     evalm[0] = startmatm+startpstm;
     evalm[1] = startmatm+startpstm;
@@ -1455,6 +1460,12 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             if (moves[depth][i] == ttmove) {
                 movescore[depth][i] = (1 << 20);
             }
+            if (moves[depth][i] == killers[depth][0]) {
+                movescore[depth][i]+=2200;
+            }
+            if (moves[depth][i] == killers[depth][1]) {
+                movescore[depth][i]+=1500;
+            }
             while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
                 temp1 = moves[depth][j];
                 temp2 = movescore[depth][j];
@@ -1493,6 +1504,10 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                     if (score >= beta) {
                         if (update && !stopsearch && abs(score) < 29000) {
                             updatett(index, depth, score, 1, moves[depth][i]);
+                        }
+                        if (((moves[depth][i]&1) == 0) && (killers[depth][0] != moves[depth][i])) {
+                            killers[depth][1] = killers[depth][0];
+                            killers[depth][0] = moves[depth][i];
                         }
                         int target = (moves[depth][i]>>6)&63;
                         int piece = (moves[depth][i]>>13)&7;
