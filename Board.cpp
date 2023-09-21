@@ -691,7 +691,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
         notation |= (1 << 16);
         notation |= (captured << 17);
         moves[depth][movecount] = notation;
-        movescore[depth][movecount] = 300+1000*captured+historytable[color][5][capturesquare];
+        movescore[depth][movecount] = 3000+10000*captured+historytable[color][5][capturesquare];
         movecount++;
         ourcaptures^=(1ULL << capturesquare);
     }
@@ -786,15 +786,15 @@ int generatemoves(int color, bool capturesonly, int depth) {
                 }
             }
             if (((color==0)&&(capturesquare&56)==56)||((color==1)&&(capturesquare&56)==0)) {
-                for (int k = 0; k < 4; k++) {
+                for (int k = 3; k >= 0; k--) {
                     moves[depth][movecount]=notation|((1 << 20)|(k << 21));
-                    movescore[depth][movecount] = 1000+captured*1000+historytable[color][0][capturesquare];
+                    movescore[depth][movecount] = (k+6+captured)*10000+historytable[color][0][capturesquare];
                     movecount++;
                 }
             }
             else if (legal) {
                 moves[depth][movecount] = notation;
-                movescore[depth][movecount] = 800+captured*1000+historytable[color][0][capturesquare];
+                movescore[depth][movecount] = 8000+captured*10000+historytable[color][0][capturesquare];
                 movecount++;
             }
             ourcaptures^=(1ULL << capturesquare);
@@ -812,9 +812,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
                     notation |= (1 << 24);
                 }
                 if (((color==0)&&(movesquare&56)==56)||((color==1)&&(movesquare&56)==0)) {
-                    for (int k = 0; k < 4; k++) {
+                    for (int k = 3; k >= 0; k--) {
                         moves[depth][movecount]=notation|((1 << 20)|(k << 21));
-                        movescore[depth][movecount] = 2000+historytable[color][0][movesquare];
+                        movescore[depth][movecount] = (k+6)*10000+historytable[color][0][movesquare];
                         movecount++;
                     }
                 }
@@ -865,7 +865,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 700+captured*1000+historytable[color][1][capturesquare];
+            movescore[depth][movecount] = 7000+captured*10000+historytable[color][1][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
@@ -922,7 +922,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 600+captured*1000+historytable[color][2][capturesquare];
+            movescore[depth][movecount] = 6000+captured*10000+historytable[color][2][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
@@ -979,7 +979,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 500+captured*1000+historytable[color][3][capturesquare];
+            movescore[depth][movecount] = 5000+captured*10000+historytable[color][3][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
@@ -1037,7 +1037,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (1 << 16);
             notation |= (captured << 17);
             moves[depth][movecount] = notation;
-            movescore[depth][movecount] = 400+captured*1000+historytable[color][4][capturesquare];
+            movescore[depth][movecount] = 4000+captured*10000+historytable[color][4][capturesquare];
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
@@ -1064,7 +1064,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (7 << 13);
             notation |= (1 << 23);
             moves[depth][movecount]=notation;
-            movescore[depth][movecount] = 1000+historytable[color][5][kingsquare+2];
+            movescore[depth][movecount] = historytable[color][5][kingsquare+2];
             movecount++;
         }
     }
@@ -1075,7 +1075,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             notation |= (7 << 13);
             notation |= (1 << 23);
             moves[depth][movecount]=notation;
-            movescore[depth][movecount] = 1000+historytable[color][5][kingsquare-2];
+            movescore[depth][movecount] = historytable[color][5][kingsquare-2];
             movecount++;
         }
     }
@@ -1348,7 +1348,7 @@ int evaluate(int color) {
     int endeval = evale[color]-evale[color^1];
     int bishops = 37*(popcount(Bitboards[color]&Bitboards[4])/2-popcount(Bitboards[color^1]&Bitboards[4])/2);
     int e = (min(gamephase[0], gamephase[1]) == 0) ? 2 : 1;
-    return (mideval*midphase+e*endeval*endphase)/24+bishops;
+    return (mideval*midphase+e*endeval*endphase)/24+bishops+11;
 }
 int quiesce(int alpha, int beta, int color, int depth) {
     int score = evaluate(color);
@@ -1461,10 +1461,10 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                 movescore[depth][i] = (1 << 20);
             }
             if (moves[depth][i] == killers[depth][0]) {
-                movescore[depth][i]+=2200;
+                movescore[depth][i]+=20000;
             }
             if (moves[depth][i] == killers[depth][1]) {
-                movescore[depth][i]+=1500;
+                movescore[depth][i]+=10000;
             }
             while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
                 temp1 = moves[depth][j];
@@ -1487,7 +1487,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((i > 3+movcount/4) && (movescore[depth][i] < 1000) && depth > 1) ? 2 : 1;
+        int r = ((i > 3+movcount/4) && (movescore[depth][i] < 2500) && depth > 1) ? 2 : 1;
         if (!stopsearch) {
             makemove(moves[depth][i], true);
             if (nullwindow) {
