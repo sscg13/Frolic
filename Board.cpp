@@ -1477,9 +1477,9 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 3 && depth < initialdepth) && nmp) {
+    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
         makenullmove();
-        score = -alphabeta(depth-3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
+        score = -alphabeta(depth-1-(depth+1)/3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
         if (score >= beta) {
             return beta;
