@@ -1452,6 +1452,14 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             return 0;
         }
     }
+    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
+        makenullmove();
+        score = -alphabeta(depth-1-(depth+1)/3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
+        unmakenullmove();
+        if (score >= beta) {
+            return beta;
+        }
+    }
     if (depth > 1) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
@@ -1475,14 +1483,6 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                 movescore[depth][j-1] = temp2;
                 j--;
             }
-        }
-    }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
-        makenullmove();
-        score = -alphabeta(depth-1-(depth+1)/3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
-        unmakenullmove();
-        if (score >= beta) {
-            return beta;
         }
     }
     for (int i = 0; i < movcount; i++) {
@@ -1834,22 +1834,6 @@ void uci() {
         int color = position&1;
         iterative(1000000000, 120000, color);
     }
-    if (ucicommand.substr(0, 12) == "go alphabeta") {
-        int sum = 0;
-        int add = 1;
-        int reader = ucicommand.length()-1;
-        while (ucicommand[reader] != ' ') {
-            sum+=((int)(ucicommand[reader]-48))*add;
-            add*=10;
-            reader--;
-        }
-        int color = position&1;
-        nodecount = 0;
-        start = chrono::steady_clock::now();
-        stopsearch = false;
-        int score = alphabeta(sum, sum, -29000, 29000, color, true, 1000000000, 120000);
-        cout << "info depth " << sum << " nodes " << nodecount << " score cp " << score << " pv " << algebraic(bestmove) << "\n";
-    }
     if (ucicommand.substr(0, 8) == "go perft") {
         start = chrono::steady_clock::now();
         int color = position&1;
@@ -1875,14 +1859,6 @@ void uci() {
             reader--;
         }
         perftnobulk(sum, sum, color);
-    }
-    if (ucicommand == "hash") {
-        cout << zobristhash << "\n";
-    }
-    if (ucicommand == "querytt") {
-        int index = zobristhash%TTsize;
-        cout << "TTkey: " << TT[index].key << "\n";
-        cout << "TTscore: " << TT[index].score << "\n";
     }
 }
 void xboard() {
