@@ -1379,12 +1379,8 @@ int quiesce(int alpha, int beta, int color, int depth) {
             int temp1 = 0;
             int temp2 = 0;
             while (j > 0 && movescore[maxdepth+depth][j] > movescore[maxdepth+depth][j-1]) {
-                temp1 = moves[maxdepth+depth][j];
-                temp2 = movescore[maxdepth+depth][j];
-                moves[maxdepth+depth][j] = moves[maxdepth+depth][j-1];
-                movescore[maxdepth+depth][j] = movescore[maxdepth+depth][j-1];
-                moves[maxdepth+depth][j-1] = temp1;
-                movescore[maxdepth+depth][j-1] = temp2;
+                swap(moves[maxdepth+depth][j], moves[maxdepth+depth][j-1]);
+                swap(movescore[maxdepth+depth][j], movescore[maxdepth+depth][j-1]);
                 j--;
             }
         }
@@ -1475,12 +1471,8 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                 movescore[depth][i]+=10000;
             }
             while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
-                temp1 = moves[depth][j];
-                temp2 = movescore[depth][j];
-                moves[depth][j] = moves[depth][j-1];
-                movescore[depth][j] = movescore[depth][j-1];
-                moves[depth][j-1] = temp1;
-                movescore[depth][j-1] = temp2;
+                swap(moves[depth][j], moves[depth][j-1]);
+                swap(movescore[depth][j], movescore[depth][j-1]);
                 j--;
             }
         }
