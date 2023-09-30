@@ -1424,8 +1424,8 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
+        int nodetype = TT[index].nodetype;
         if (ttdepth >= depth) {
-            int nodetype = TT[index].nodetype;
             if (bestmove >= 0 && repetitions() == 0) {
                 if (nodetype == 3) {
                     return score;
@@ -1437,6 +1437,18 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                     return score;
                 }
             }
+        }
+        else {
+            int margin = 40+60*(depth-ttdepth);
+            if ((nodetype&1) && (score-margin >= beta) && abs(beta) < 27000) {
+                return score-margin;
+            }
+        }
+    }
+    int margin = 40+60*depth;
+    if (depth < initialdepth && score == -30000) {
+        if (evaluate(color)-margin >= beta && abs(beta) < 27000) {
+            return evaluate(color)-margin;
         }
     }
     movcount = generatemoves(color, 0, depth);
