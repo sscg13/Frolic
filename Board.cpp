@@ -1160,13 +1160,12 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((i > 3+movcount/4) && (movescore[depth][i] < 2500) && depth > 1) ? 2 : 1;
         if (!stopsearch) {
             makemove(moves[depth][i], true);
             if (nullwindow) {
-                score = -alphabeta(depth-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
+                score = -alphabeta(depth-1, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
                 if (score > alpha && score < beta) {
-                    score = -alphabeta(depth-r, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+                    score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
                 }
             }
             else {
