@@ -36,27 +36,19 @@ U64 Rank6 = Rank1 << 40;
 U64 Rank7 = Rank1 << 48;
 U64 Rank8 = Rank1 << 56;
 U64 Bitboards[8];
-//White, Black, Pawn, Knight, Bishop, Rook, Queen, King
-U64 AntiDiags[15] = {1ULL, 0x0000000000000102, 0x0000000000010204, 0x0000000001020408, 0x0000000102040810,
-0x0000010204081020, 0x0001020408102040, 0x0102040810204080, 0x0204081020408000, 0x0408102040800000,
-0x0810204080000000, 0x1020408000000000, 0x2040800000000000, 0x4080000000000000, 0x8000000000000000};
-U64 Diags[15] = {0x0100000000000000, 0x0201000000000000,0x0402010000000000, 0x0804020100000000, 0x1008040201000000,
-0x2010080402010000, 0x4020100804020100, 0x8040201008040201, 0x0080402010080402, 0x0000804020100804,
-0x0000008040201008, 0x0000000080402010, 0x0000000000804020, 0x0000000000008040, 0x0000000000000080};
+//White, Black, Pawn, Alfil, Ferz, Knight, Rook, King
 U64 Files[8] = {FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH};
 U64 Ranks[8] = {Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8};
 U64 KingAttacks[64];
 U64 PawnAttacks[2][64];
+U64 AlfilAttacks[64];
+U64 FerzAttacks[64];
 U64 KnightAttacks[64];
 U64 RankMask[64];
 U64 FileMask[64];
-U64 DiagMask[64];
-U64 AntiMask[64];
 U64 RankAttacks[512];
 U64 hashes[8][64];
-U64 epfilehash[8];
 U64 colorhash = 0xE344F58E0F3B26E5;
-U64 castlinghash[16];
 U64 zobrist[1024];
 int history[1024];
 int gamelength = 0;
@@ -82,37 +74,35 @@ bool stopsearch = false;
 //26 bits total for now?
 int movecount;
 auto start = chrono::steady_clock::now();
-int materialm[6] = {82, 337, 365, 477, 1025, 20000};
-int materiale[6] = {94, 281, 297, 512, 936, 20000};
-int pstm[6][64] = {{0,0,0,0,0,0,0,0,-35,-1,-20,-23,-15,24,38,-22,-26,-4,-4,-10,3,3,33,-12,-27,-2,-5,12,17,6,10,-25,
--14,13,6,21,23,12,17,-23,-6,7,26,31,65,56,25,-20,98,134,61,95,68,126,34,-11,0,0,0,0,0,0,0,0},
-{-105,-21,-58,-33,-17,-28,-19,-23,-29,-53,-12,-3,-1,18,-14,-19,-23,-9,12,10,19,17,25,-16,-13,4,16,13,28,19,21,-8,
--9,17,19,53,37,69,18,22,-47,60,37,65,84,129,73,44,-73,-41,72,36,23,62,7,-17,-167,-89,-34,-49,61,-97,-15,-107},
-{-33,-3,-14,-21,-13,-12,-39,-21,4,15,16,0,7,21,33,1,0,15,15,15,14,27,18,10,-6,13,13,26,34,12,10,4,
--4,5,19,50,37,37,7,-2,-16,37,43,40,35,50,37,-2,-26,16,-18,-13,30,59,18,-47,-29,4,-82,-37,-25,-42,7,-8},
-{-19,-13,1,17,16,7,-37,-26,-44,-16,-20,-9,-1,11,-6,-71,-45,-25,-16,-17,3,0,-5,-33,-36,-26,-12,-1,9,-7,6,-23,
--24,-11,7,26,24,35,-8,-20,-5,19,26,36,17,45,61,16,27,32,58,62,80,67,26,44,32,42,32,51,63,9,31,43},
-{-1,-18,-9,10,-15,-25,-31,-50,-35,-8,11,2,8,15,-3,1,-14,2,-11,-2,-5,2,14,5,-9,-26,-9,-10,-2,-4,3,-3,
--27,-27,-16,-16,-1,17,-2,1,-13,-17,7,8,29,56,47,57,-24,-39,-5,1,-16,57,28,54,-28,0,29,12,59,44,43,45},
-{-15,36,12,-54,8,-28,34,14,1,7,-8,-64,-43,-16,9,8,-14,-14,-22,-46,-44,-30,-15,-27,-49,-1,-27,-39,-46,-44,-33,-51,
--17,-20,-12,-27,-30,-25,-14,-36,-9,24,2,-16,-20,6,22,-22,29,-1,-20,-7,-8,-4,-38,-29,-65,23,16,-15,-56,-34,2,13}};
-int pste[6][64] = {{0,0,0,0,0,0,0,0,13,8,8,10,13,0,2,-7,4,7,-6,1,0,-5,-1,-8,13,9,-3,-7,-7,-8,3,-1,
-32,24,13,5,-2,4,17,17,94,100,85,67,56,53,82,84,178,173,158,134,147,132,165,187,0,0,0,0,0,0,0,0},
-{-29,-51,-23,-15,-22,-18,-50,-64,-42,-20,-10,-5,-2,-20,-23,-44,-23,-3,-1,15,10,-3,-20,-22,-18,-6,16,25,16,17,4,-18,
--17,3,22,22,22,11,8,-18,-24,-20,10,9,-1,-9,-19,-41,-25,-8,-25,-2,-9,-25,-24,-52,-58,-38,-13,-28,-31,-27,-63,-99},
-{-23,-9,-23,-5,-9,-16,-5,-17,-14,-18,-7,-1,4,-9,-15,-27,-12,-3,8,10,13,3,-7,-15,-6,3,13,19,7,10,-3,-9,
--3,9,12,9,14,10,3,2,2,-8,0,-1,-2,6,0,4,-8,-4,7,-12,-3,-13,-4,-14,-14,-21,-11,-8,-7,-9,-17,-24},
-{-9,2,3,-1,-5,-13,4,-20,-6,-6,0,2,-9,-9,-11,-3,-4,0,-5,-1,-7,-12,-8,-16,3,5,8,4,-5,-6,-8,-11,
-4,3,13,1,2,1,-1,2,7,7,7,5,4,-3,-5,-3,11,13,13,11,-3,3,8,3,13,10,18,15,12,12,8,5},
-{-33,-28,-22,-43,-5,-32,-20,-41,-22,-23,-30,-16,-16,-23,-36,-32,-16,-27,15,6,9,17,10,5,-18,28,19,47,31,34,39,23,
-3,22,24,45,57,40,57,36,-20,6,9,49,47,35,19,9,-17,20,32,41,58,25,30,0,-9,22,22,27,27,19,10,20},
-{-53,-34,-21,-11,-28,-14,-24,-43,-27,-11,4,13,14,4,-5,-17,-19,-3,11,21,23,16,7,-9,-18,-4,21,24,27,23,9,-11,
--8,22,24,27,26,33,26,3,10,17,23,15,20,45,44,13,-12,17,14,17,17,38,23,11,-74,-35,-18,-18,-11,15,4,-17}};
-int castlechange[64] = {13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
-15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,7, 15, 15, 15,  3, 15, 15, 11};
+int materialm[6] = {87, 103, 144, 331, 564, 20000}; //updated
+int materiale[6] = {119, 92, 185, 380, 755, 20000}; //updated
+int pstm[6][64] = {{0,0,0,0,0,0,0,0,-23,-7,-16,-37,-43,-19,-6,-13,-10,9,1,-8,-16,4,12,-18,-17,-12,-9,5,2,-3,-22,-14,
+-6,-8,-5,-7,3,9,-14,-10,1,17,13,20,26,18,4,-4,23,32,27,38,47,35,19,16,0,0,0,0,0,0,0,0},
+{-41,-35,-14,-17,-19,-7,-33,-45,-38,-36,-4,-7,-5,1,-32,-37,-22,-15,9,8,11,6,-17,-26,-17,-12,13,26,23,18,-13,-18,
+-19,3,15,24,23,14,-4,-20,-25,-8,12,19,17,19,-9,-23,-36,-21,7,5,6,2,-28,-35,-39,-33,-17,-11,-16,-22,-31,-38},
+{-39,-23,-26,-22,-18,-21,-27,-34,-29,-15,-9,-14,-19,-5,-21,-32,-31,-13,-2,3,11,6,-3,-22,-23,-17,6,18,15,4,-2,-17,
+-16,-8,1,14,43,13,7,-19,-5,-13,-7,22,19,31,9,-11,-26,-14,0,5,6,-2,-7,-25,-32,-20,-14,-9,-6,-19,-17,-37},
+{-42,-11,-3,7,4,-5,-16,-37,-28,-10,-5,19,13,0,-8,-31,-21,-12,15,7,3,21,-1,-9,-23,-2,8,35,28,19,12,-11,
+-16,-7,13,44,39,26,25,2,-20,-10,5,24,29,18,6,-17,-31,-8,-2,7,11,0,-3,-29,-47,-23,-13,-1,2,5,-7,-42},
+{-29,-22,-13,-7,-9,-12,-7,-30,-24,-19,-14,1,-2,13,5,-11,-17,-13,-11,-4,-16,1,9,-3,-15,-15,-10,-6,-9,5,-1,4,
+-8,-10,-5,-3,-12,0,3,-7,-11,-7,-8,2,-5,8,-7,1,-2,6,11,14,9,17,5,8,3,8,9,16,15,13,9,10},
+{-13,-3,5,-2,1,-9,-5,-16,3,12,19,8,4,17,13,-1,-5,0,4,7,2,5,-2,-8,-12,-9,-15,-19,-20,-17,-13,-11,
+-18,-16,-23,-27,-31,-22,-18,-17,-17,-17,-15,-20,-26,-24,-21,-18,-19,-17,-18,-22,-24,-19,-23,-20,-18,-20,-19,-25,-22,-16,-18,-14}};
+int pste[6][64] = {{0,0,0,0,0,0,0,0,-23,-7,-16,-37,-43,-19,-6,-13,-10,9,1,-8,-16,4,12,-18,-17,-12,-9,5,2,-3,-22,-14,
+-6,-8,-5,-7,3,9,-14,-10,1,17,13,20,26,18,4,-4,23,32,27,38,47,35,19,16,0,0,0,0,0,0,0,0},
+{-41,-35,-14,-17,-19,-7,-33,-45,-38,-36,-4,-7,-5,1,-32,-37,-22,-15,9,8,11,6,-17,-26,-17,-12,13,26,23,18,-13,-18,
+-19,3,15,24,23,14,-4,-20,-25,-8,12,19,17,19,-9,-23,-36,-21,7,5,6,2,-28,-35,-39,-33,-17,-11,-16,-22,-31,-38},
+{-39,-23,-26,-22,-18,-21,-27,-34,-29,-15,-9,-14,-19,-5,-21,-32,-31,-13,-2,3,11,6,-3,-22,-23,-17,6,18,15,4,-2,-17,
+-16,-8,1,14,43,13,7,-19,-5,-13,-7,22,19,31,9,-11,-26,-14,0,5,6,-2,-7,-25,-32,-20,-14,-9,-6,-19,-17,-37},
+{-42,-11,-3,7,4,-5,-16,-37,-28,-10,-5,19,13,0,-8,-31,-21,-12,15,7,3,21,-1,-9,-23,-2,8,35,28,19,12,-11,
+-16,-7,13,44,39,26,25,2,-20,-10,5,24,29,18,6,-17,-31,-8,-2,7,11,0,-3,-29,-47,-23,-13,-1,2,5,-7,-42},
+{-29,-22,-13,-7,-9,-12,-7,-30,-24,-19,-14,1,-2,13,5,-11,-17,-13,-11,-4,-16,1,9,-3,-15,-15,-10,-6,-9,5,-1,4,
+-8,-10,-5,-3,-12,0,3,-7,-11,-7,-8,2,-5,8,-7,1,-2,6,11,14,9,17,5,8,3,8,9,16,15,13,9,10},
+{-33,-31,-27,-22,-24,-29,-34,-42,-23,-19,-6,1,-4,-9,-17,-30,-13,-5,2,7,4,0,-7,-17,-8,-2,11,14,15,9,4,-9,
+-6,3,9,19,17,12,5,-4,-7,-1,4,11,8,10,1,-7,-18,-10,-7,0,-2,4,-8,-23,-29,-24,-18,-11,-16,-13,-20,-31}};
 int historytable[2][6][64];
-int startpiece[16] = {3, 1, 2, 4, 5, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0};
-int phase[6] = {0, 1, 1, 2, 4, 0};
+int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0}; //updated
+int phase[6] = {0, 1, 2, 4, 6, 0}; //updated
 int gamephase[2] = {0, 0};
 struct TTentry {
     U64 key;
@@ -153,6 +143,12 @@ void initializeleaperattacks() {
         knightattack |= ((square & ~FileA & ~FileB) << 6);
         knightattack |= ((square & ~FileA & ~FileB) >> 10);
         KnightAttacks[i] = knightattack;
+        FerzAttacks[i] = shift_n(shift_w(square)|shift_e(square)) | shift_s(shift_w(square)|shift_e(square));
+        U64 alfilattack = ((square & ~FileA & ~FileB) << 14);
+        alfilattack |= ((square & ~FileA & ~FileB) >> 18);
+        alfilattack |= ((square & ~FileG & ~FileH) << 18);
+        alfilattack |= ((square & ~FileG & ~FileH) >> 14);
+        AlfilAttacks[i] = alfilattack;
     }
 }
 void initializemasks() {
@@ -160,8 +156,6 @@ void initializemasks() {
         for (int j = 0; j < 8; j++) {
             RankMask[8*i+j] = Ranks[i];
             FileMask[8*i+j] = Files[j];
-            AntiMask[8*i+j] = AntiDiags[i+j];
-            DiagMask[8*i+j] = Diags[j+7-i];
         }
     }
 }
@@ -194,43 +188,6 @@ void initializerankattacks() {
         }
     }
 }
-U64 PawnMoves(U64 occupied, int square, int color) {
-    int row = square&56;
-    U64 step1;
-    if (color == 0) {
-        step1 = (1ULL << (square+8))&(~occupied);
-    }
-    else {
-        step1 = (1ULL << (square-8))&(~occupied);
-    }
-    if ((row != 8 && color == 0)||(row!=48 && color == 1)) {
-        return step1;
-    }
-    U64 step2;
-    if (color == 0) {
-        step2 = (step1<<8)&(~occupied);
-    }
-    else {
-        step2 = (step1>>8)&(~occupied);
-    }
-    return step1|step2;
-}
-U64 DiagAttacks(U64 occupied, int square) {
-    U64 forwards = occupied & DiagMask[square];
-    U64 backwards = byteswap(forwards);
-    forwards = forwards - 2*(1ULL << square);
-    backwards = backwards - 2*(1ULL << (56^square));
-    backwards = byteswap(backwards);
-    return (forwards^backwards) & DiagMask[square];
-}
-U64 AntiAttacks(U64 occupied, int square) {
-    U64 forwards = occupied & AntiMask[square];
-    U64 backwards = byteswap(forwards);
-    forwards = forwards - 2*(1ULL << square);
-    backwards = backwards - 2*(1ULL << (56^square));
-    backwards = byteswap(backwards);
-    return (forwards^backwards) & AntiMask[square];
-}
 U64 FileAttacks(U64 occupied, int square) {
     U64 forwards = occupied & FileMask[square];
     U64 backwards = byteswap(forwards);
@@ -251,10 +208,6 @@ void initializezobrist() {
         for (int j = 0; j < 64; j++) {
             hashes[i][j] = mt();
         }
-        epfilehash[i] = mt();
-    }
-    for (int i = 0; i < 16; i++) {
-        castlinghash[i] = mt();
     }
 }
 U64 scratchzobrist() {
@@ -269,12 +222,6 @@ U64 scratchzobrist() {
     if (position & 1) {
         scratch^=colorhash;
     }
-    if (position & 0x00003F00) {
-        int file = (position >> 8) & 7;
-        scratch^=epfilehash[file];
-    }
-    int castling = (position >> 14) & 15;
-    scratch^=castlinghash[castling];
     return scratch;
 }
 void initializett() {
@@ -309,15 +256,15 @@ void initializeboard() {
     Bitboards[0] = Rank1 | Rank2;
     Bitboards[1] = Rank7 | Rank8;
     Bitboards[2] = Rank2 | Rank7;
-    Bitboards[3] = (Rank1 | Rank8) & (FileB | FileG);
-    Bitboards[4] = (Rank1 | Rank8) & (FileC | FileF);
-    Bitboards[5] = (Rank1 | Rank8) & (FileA | FileH);
-    Bitboards[6] = (Rank1 | Rank8) & FileD;
-    Bitboards[7] = (Rank1 | Rank8) & FileE;
-    position = 0x0003C000;
+    Bitboards[3] = (Rank1 | Rank8) & (FileC | FileF);
+    Bitboards[4] = (Rank1 | Rank8) & FileE;
+    Bitboards[5] = (Rank1 | Rank8) & (FileB | FileG);
+    Bitboards[6] = (Rank1 | Rank8) & (FileA | FileH);
+    Bitboards[7] = (Rank1 | Rank8) & FileD;
+    position = 0x0000000;
     history[0] = position;
-    int startmatm = (8*materialm[0]+2*(materialm[1]+materialm[2]+materialm[3])+materialm[4]);
-    int startmate = (8*materiale[0]+2*(materiale[1]+materiale[2]+materiale[3])+materiale[4]);
+    int startmatm = (8*materialm[0]+2*(materialm[1]+materialm[3]+materialm[4])+materialm[2]);
+    int startmate = (8*materiale[0]+2*(materiale[1]+materiale[3]+materiale[4])+materiale[2]);
     int startpstm = 0;
     int startpste = 0;
     for (int i = 0; i < 16; i++) {
@@ -332,8 +279,8 @@ void initializeboard() {
     evalm[1] = startmatm+startpstm;
     evale[0] = startmate+startpste;
     evale[1] = startmate+startpste;
-    gamephase[0] = 12;
-    gamephase[1] = 12;
+    gamephase[0] = 24;
+    gamephase[1] = 24;
     gamelength = 0;
     zobrist[0] = scratchzobrist();
 }
@@ -354,23 +301,18 @@ U64 checkers(int color) {
     int opposite = color^1;
     U64 attacks = 0ULL;
     U64 occupied = Bitboards[0] | Bitboards[1];
-    attacks |= (KnightAttacks[kingsquare]&Bitboards[3]);
+    attacks |= (KnightAttacks[kingsquare]&Bitboards[5]);
     attacks |= (PawnAttacks[color][kingsquare]&Bitboards[2]);
-    attacks |= (DiagAttacks(occupied, kingsquare)&(Bitboards[4]|Bitboards[6]));
-    attacks |= (AntiAttacks(occupied, kingsquare)&(Bitboards[4]|Bitboards[6]));
-    attacks |= (GetRankAttacks(occupied, kingsquare)&(Bitboards[5]|Bitboards[6]));
-    attacks |= (FileAttacks(occupied, kingsquare)&(Bitboards[5]|Bitboards[6]));
+    attacks |= (AlfilAttacks[kingsquare]&Bitboards[3]);
+    attacks |= (FerzAttacks[kingsquare]&Bitboards[4]);
+    attacks |= (GetRankAttacks(occupied, kingsquare)&Bitboards[6]);
+    attacks |= (FileAttacks(occupied, kingsquare)&Bitboards[6]);
     attacks &= Bitboards[opposite];
     return attacks;
 }
 void makenullmove() {
     gamelength++;
     int halfmove = (position >> 1)&127;
-    if (position & 0x00003F00) {
-        int file = (position >> 8) & 7;
-        zobristhash^=epfilehash[file];
-        position^=((position >> 8)&63);
-    }
     zobristhash^=colorhash;
     position^=(halfmove << 1);
     halfmove++;
@@ -394,12 +336,6 @@ void makemove(int notation, bool reversible) {
     if (!reversible) {
         root = gamelength;
     }
-    if (position & 0x00003F00) {
-        int file = (position >> 8) & 7;
-        zobristhash^=epfilehash[file];
-    }
-    int castling = (position >> 14) & 15;
-    zobristhash^=castlinghash[castling];
     int from = notation & 63;
     int to = (notation >> 6) & 63;
     int color = (notation >> 12) & 1;
@@ -448,53 +384,12 @@ void makemove(int notation, bool reversible) {
         evale[color]+=(materiale[promoted+1]+pste[promoted+1][(56*color)^to]);
         gamephase[color]+=phase[promoted+1];
     }
-    else if (notation & (1 << 23)) {
-        if (to&4) {
-            Bitboards[color]^=((1ULL << (to-1)) | (1ULL << (to+1)));
-            Bitboards[5]^=((1ULL << (to-1)) | (1ULL << (to+1)));
-            zobristhash^=(hashes[color][to-1]^hashes[color][to+1]);
-            zobristhash^=(hashes[5][to-1]^hashes[5][to+1]);
-            evalm[color]+=(pstm[4][7^(56*color)]-pstm[4][5^(56*color)]);
-            evale[color]+=(pste[4][7^(56*color)]-pste[4][5^(56*color)]);
-        }
-        else {
-            Bitboards[color]^=((1ULL << (to-2)) | (1ULL << (to+1)));
-            Bitboards[5]^=((1ULL << (to-2)) | (1ULL << (to+1)));
-            zobristhash^=(hashes[color][to-2]^hashes[color][to+1]);
-            zobristhash^=(hashes[5][to-2]^hashes[5][to+1]);
-            evalm[color]+=(pstm[4][0^(56*color)]-pstm[4][3^(56*color)]);
-            evale[color]+=(pste[4][0^(56*color)]-pste[4][3^(56*color)]);
-        }
-        evalm[color]+=50;
-    }
     else if (notation & (1 << 24)) {
         position^=((from+to) << 7);
     }
-    else if (notation & (1 << 25)) {
-        int shadow;
-        if (color==1) {
-            shadow = to+8;
-        }
-        else {
-            shadow = to-8;
-        }
-        Bitboards[2]^=(1ULL << shadow);
-        Bitboards[color^1]^=(1ULL << shadow);
-        zobristhash^=(hashes[2][shadow]^hashes[color^1][shadow]);
-        evalm[color^1]-=(materialm[0]+pstm[0][(56*(color^1))^shadow]);
-        evale[color^1]-=(materiale[0]+pste[0][(56*(color^1))^shadow]);
-    }
-    position&=(0x00003FFF | (castlechange[from] << 14));
-    position&=(0x00003FFF | (castlechange[to] << 14));
     position^=1;
     position^=(halfmove << 1);
     zobristhash^=colorhash;
-    if (position & 0x00003F00) {
-        int file = (position >> 8) & 7;
-        zobristhash^=epfilehash[file];
-    }
-    castling = (position >> 14) & 15;
-    zobristhash^=castlinghash[castling];
     history[gamelength] = position;
     zobrist[gamelength] = zobristhash;
     nodecount++;
@@ -533,34 +428,6 @@ void unmakemove(int notation) {
         evale[color]-=(materiale[promoted+1]+pste[promoted+1][(56*color)^to]);
         gamephase[color]-=phase[promoted+1];
     }
-    else if (notation & (1 << 23)) {
-        if (to&4) {
-            Bitboards[color]^=((1ULL << (to-1)) | (1ULL << (to+1)));
-            Bitboards[5]^=((1ULL << (to-1)) | (1ULL << (to+1)));
-            evalm[color]+=(pstm[4][5^(56*color)]-pstm[4][7^(56*color)]);
-            evale[color]+=(pste[4][5^(56*color)]-pste[4][7^(56*color)]);
-        }
-        else {
-            Bitboards[color]^=((1ULL << (to-2)) | (1ULL << (to+1)));
-            Bitboards[5]^=((1ULL << (to-2)) | (1ULL << (to+1)));
-            evalm[color]+=(pstm[4][3^(56*color)]-pstm[4][0^(56*color)]);
-            evale[color]+=(pste[4][3^(56*color)]-pste[4][0^(56*color)]);
-        }
-        evalm[color]-=50;
-    }
-    else if (notation & (1 << 25)) {
-        int shadow;
-        if (color) {
-            shadow = to+8;
-        }
-        else {
-            shadow = to-8;
-        }
-        Bitboards[2]^=(1ULL << shadow);
-        Bitboards[color^1]^=(1ULL << shadow);
-        evalm[color^1]+=(materialm[0]+pstm[0][(56*(color^1))^shadow]);
-        evale[color^1]+=(materiale[0]+pste[0][(56*(color^1))^shadow]);
-    }
 }
 int generatemoves(int color, bool capturesonly, int depth) {
     movecount = 0;
@@ -572,21 +439,19 @@ int generatemoves(int color, bool capturesonly, int depth) {
     U64 pinnedpieces = 0ULL;
     U64 checkmask = 0ULL;
     U64 preoccupied = Bitboards[0] | Bitboards[1];
-    U64 kingDiag = DiagAttacks(preoccupied, kingsquare);
-    U64 kingAnti = AntiAttacks(preoccupied, kingsquare);
     U64 kingRank = GetRankAttacks(preoccupied, kingsquare);
     U64 kingFile = FileAttacks(preoccupied, kingsquare);
     U64 occupied = preoccupied^(1ULL << kingsquare);
     U64 opponentpawns = Bitboards[opposite]&Bitboards[2];
-    U64 opponentknights = Bitboards[opposite]&Bitboards[3];
-    U64 opponentbishops = Bitboards[opposite]&Bitboards[4];
-    U64 opponentrooks = Bitboards[opposite]&Bitboards[5];
-    U64 opponentqueens = Bitboards[opposite]&Bitboards[6];
+    U64 opponentalfils = Bitboards[opposite]&Bitboards[3];
+    U64 opponentferzes = Bitboards[opposite]&Bitboards[4];
+    U64 opponentknights = Bitboards[opposite]&Bitboards[5];
+    U64 opponentrooks = Bitboards[opposite]&Bitboards[6];
     int pawncount = popcount(opponentpawns);
+    int alfilcount = popcount(opponentalfils);
+    int ferzcount = popcount(opponentferzes);
     int knightcount = popcount(opponentknights);
-    int bishopcount = popcount(opponentbishops);
     int rookcount = popcount(opponentrooks);
-    int queencount = popcount(opponentqueens);
     U64 ourcaptures = 0ULL;
     U64 ourmoves = 0ULL;
     U64 ourmask = 0ULL;
@@ -595,29 +460,20 @@ int generatemoves(int color, bool capturesonly, int depth) {
         opponentattacks |= PawnAttacks[opposite][pawnsquare];
         opponentpawns^=(1ULL << pawnsquare);
     }
+    for (int i = 0; i < alfilcount; i++) {
+        int alfilsquare = popcount((opponentalfils & -opponentalfils)-1);
+        opponentattacks |= AlfilAttacks[alfilsquare];
+        opponentalfils^=(1ULL << alfilsquare);
+    }
+    for (int i = 0; i < ferzcount; i++) {
+        int ferzsquare = popcount((opponentferzes & -opponentferzes)-1);
+        opponentattacks |= FerzAttacks[ferzsquare];
+        opponentferzes^=(1ULL << ferzsquare);
+    }
     for (int i = 0; i < knightcount; i++) {
         int knightsquare = popcount((opponentknights & -opponentknights)-1);
         opponentattacks |= KnightAttacks[knightsquare];
         opponentknights^=(1ULL << knightsquare);
-    }
-    for (int i = 0; i < bishopcount; i++) {
-        int bishopsquare = popcount((opponentbishops & -opponentbishops)-1);
-        U64 diag = DiagAttacks(occupied, bishopsquare);
-        U64 anti = AntiAttacks(occupied, bishopsquare);
-        if (!(diag&(1ULL << kingsquare))) {
-            pinnedpieces |= (diag & kingDiag);
-        }
-        else {
-            checkmask |= (DiagAttacks(preoccupied, bishopsquare) & kingDiag);
-        }
-        if (!(anti&(1ULL << kingsquare))) {
-            pinnedpieces |= (anti & kingAnti);
-        }
-        else {
-            checkmask |= (AntiAttacks(preoccupied, bishopsquare) & kingAnti);
-        }
-        opponentattacks |= (diag | anti);
-        opponentbishops^=(1ULL << bishopsquare);
     }
     for (int i = 0; i < rookcount; i++) {
         int rooksquare = popcount((opponentrooks & -opponentrooks)-1);
@@ -637,40 +493,6 @@ int generatemoves(int color, bool capturesonly, int depth) {
         }
         opponentattacks |= (r | file);
         opponentrooks^=(1ULL << rooksquare);
-    }
-    for (int i = 0; i < queencount; i++) {
-        int queensquare = popcount((opponentqueens & -opponentqueens)-1);
-        U64 diag = DiagAttacks(occupied, queensquare);
-        U64 anti = AntiAttacks(occupied, queensquare);
-        U64 r = GetRankAttacks(occupied, queensquare);
-        U64 file = FileAttacks(occupied, queensquare);
-        if (!(diag&(1ULL << kingsquare))) {
-            pinnedpieces |= (diag & kingDiag);
-        }
-        else {
-            checkmask |= (DiagAttacks(preoccupied, queensquare) & kingDiag);
-        }
-        if (!(anti&(1ULL << kingsquare))) {
-            pinnedpieces |= (anti & kingAnti);
-        }
-        else {
-            checkmask |= (AntiAttacks(preoccupied, queensquare) & kingAnti);
-        }
-        if (!(r&(1ULL << kingsquare))) {
-            pinnedpieces |= (r & kingRank);
-        }
-        else {
-            checkmask |= (GetRankAttacks(preoccupied, queensquare) & kingRank);
-        }
-        if (!(file&(1ULL << kingsquare))) {
-            pinnedpieces |= (file & kingFile);
-        }
-        else {
-            checkmask |= (FileAttacks(preoccupied, queensquare) & kingFile);
-        }
-        opponentattacks |= (r | file);
-        opponentattacks |= (diag | anti);
-        opponentqueens^=(1ULL << queensquare);
     }
     int opponentking = popcount((Bitboards[opposite]&Bitboards[7])-1);
     opponentattacks |= KingAttacks[opponentking];
@@ -720,79 +542,50 @@ int generatemoves(int color, bool capturesonly, int depth) {
         checkmask = ~(0ULL);
     }
     U64 ourpawns = Bitboards[color]&Bitboards[2];
-    U64 ourknights = Bitboards[color]&Bitboards[3];
-    U64 ourbishops = Bitboards[color]&Bitboards[4];
-    U64 ourrooks = Bitboards[color]&Bitboards[5];
-    U64 ourqueens = Bitboards[color]&Bitboards[6];
+    U64 ouralfils = Bitboards[color]&Bitboards[3];
+    U64 ourferzes = Bitboards[color]&Bitboards[4];
+    U64 ourknights = Bitboards[color]&Bitboards[5];
+    U64 ourrooks = Bitboards[color]&Bitboards[6];
     pawncount = popcount(ourpawns);
+    alfilcount = popcount(ouralfils);
+    ferzcount = popcount(ourferzes);
     knightcount = popcount(ourknights);
-    bishopcount = popcount(ourbishops);
     rookcount = popcount(ourrooks);
-    queencount = popcount(ourqueens);
     for (int i = 0; i < pawncount; i++) {
         int pawnsquare = popcount((ourpawns & -ourpawns)-1);
-        int epsquare = (position >> 8)&63;
-        U64 pinmask = ~(0ULL);
-        if (pinnedpieces&(1ULL << pawnsquare)) {
-            int pawnrank = pawnsquare&56;
-            int pawnfile = pawnsquare&7;
-            if (pawnrank == pinrank) {
-                pinmask = GetRankAttacks(preoccupied, pawnsquare);
-            }
-            else if (pawnfile == pinfile) {
-                pinmask = FileAttacks(preoccupied, pawnsquare);
-            }
-            else if ((pawnfile-pinfile)*(pawnrank-pinrank)>0) {
-                pinmask = DiagAttacks(preoccupied, pawnsquare);
-            }
-            else {
-                pinmask = AntiAttacks(preoccupied, pawnsquare);
-            }
+        if ((pinnedpieces&(1ULL << pawnsquare)) && (pawnsquare&56 == pinrank)) {
+            ourpawns^=(1ULL << pawnsquare);
+            continue;
         }
-        ourcaptures = PawnAttacks[color][pawnsquare]&(Bitboards[opposite]|(((1ULL<<epsquare)>>1)<<1));
-        int eptake;
-        if (color == 0) {
-            eptake = epsquare-8;
+        else if ((pinnedpieces&(1ULL << pawnsquare)) && capturesonly) {
+            ourpawns^=(1ULL << pawnsquare);
+            continue;
         }
-        else {
-            eptake = epsquare+8;
+        int capturenumber = 0;
+        if ((pinnedpieces&(1ULL << pawnsquare)) == 0ULL) {
+            ourcaptures = PawnAttacks[color][pawnsquare]&Bitboards[opposite];
+            ourcaptures &= checkmask;
+            capturenumber = popcount(ourcaptures);
         }
-        U64 effectivemask = checkmask;
-        if (checkmask&(1ULL << eptake)) {
-            effectivemask |= (1ULL << epsquare);
-        }
-        ourcaptures &= (pinmask&effectivemask);
-        int capturenumber = popcount(ourcaptures);
         for (int j = 0; j < capturenumber; j++) {
             int capturesquare = popcount((ourcaptures & -ourcaptures)-1);
             int notation = pawnsquare | (capturesquare << 6);
             notation |= (color << 12);
             notation |= (2 << 13);
             int captured = 0;
-            bool legal = true;
             for (int j = 2; j < 7; j++) {
                 if ((1ULL << capturesquare)&(Bitboards[opposite]&Bitboards[j])) {
                     captured = j;
                 }
             }
-            if (captured > 0) {
-                notation |= (1 << 16);
-                notation |= (captured << 17);
+            notation |= (1 << 16);
+            notation |= (captured << 17);
+            if (((color==0)&&(capturesquare&56)==56)||((color==1)&&(capturesquare&56)==0)) {
+                moves[depth][movecount]=notation|(3 << 20);
+                movescore[depth][movecount] = (2+captured)*10000+historytable[color][0][capturesquare];
+                movecount++;
             }
             else {
-                notation |= (1 << 25);
-                if (GetRankAttacks((preoccupied^((1ULL << eptake)|(1ULL << pawnsquare))), kingsquare)&(Bitboards[opposite]&(Bitboards[5]|Bitboards[6]))) {
-                    legal = false;
-                }
-            }
-            if (((color==0)&&(capturesquare&56)==56)||((color==1)&&(capturesquare&56)==0)) {
-                for (int k = 3; k >= 0; k--) {
-                    moves[depth][movecount]=notation|((1 << 20)|(k << 21));
-                    movescore[depth][movecount] = (k+6+captured)*10000+historytable[color][0][capturesquare];
-                    movecount++;
-                }
-            }
-            else if (legal) {
                 moves[depth][movecount] = notation;
                 movescore[depth][movecount] = 8000+captured*10000+historytable[color][0][capturesquare];
                 movecount++;
@@ -800,23 +593,18 @@ int generatemoves(int color, bool capturesonly, int depth) {
             ourcaptures^=(1ULL << capturesquare);
         }
         if (!capturesonly) {
-            ourmoves = PawnMoves(preoccupied, pawnsquare, color);
-            ourmoves &= (pinmask&checkmask);
+            ourmoves = (1ULL << (pawnsquare+8*(1-2*color)))&(~preoccupied);
+            ourmoves &= checkmask;
             int movenumber = popcount(ourmoves);
             for (int j = 0; j < movenumber; j++) {
                 int movesquare = popcount((ourmoves & -ourmoves)-1);
                 int notation = pawnsquare | (movesquare << 6);
                 notation |= (color << 12);
                 notation |= (2 << 13);
-                if ((movesquare-pawnsquare==16 && color==0)||(pawnsquare-movesquare==16 && color==1)) {
-                    notation |= (1 << 24);
-                }
                 if (((color==0)&&(movesquare&56)==56)||((color==1)&&(movesquare&56)==0)) {
-                    for (int k = 3; k >= 0; k--) {
-                        moves[depth][movecount]=notation|((1 << 20)|(k << 21));
-                        movescore[depth][movecount] = (k+6)*10000+historytable[color][0][movesquare];
-                        movecount++;
-                    }
+                    moves[depth][movecount]=notation|(3 << 20);
+                    movescore[depth][movecount] = 60000+historytable[color][0][movesquare];
+                    movecount++;
                 }
                 else {
                     moves[depth][movecount]=notation;
@@ -828,32 +616,19 @@ int generatemoves(int color, bool capturesonly, int depth) {
         }
         ourpawns^=(1ULL << pawnsquare);
     }
-    for (int i = 0; i < knightcount; i++) {
-        int knightsquare = popcount((ourknights & -ourknights)-1);
-        U64 pinmask = ~(0ULL);
-        if (pinnedpieces&(1ULL << knightsquare)) {
-            int knightrank = knightsquare&56;
-            int knightfile = knightsquare&7;
-            if (knightrank == pinrank) {
-                pinmask = GetRankAttacks(preoccupied, knightsquare);
-            }
-            else if (knightfile == pinfile) {
-                pinmask = FileAttacks(preoccupied, knightsquare);
-            }
-            else if ((knightfile-pinfile)*(knightrank-pinrank)>0) {
-                pinmask = DiagAttacks(preoccupied, knightsquare);
-            }
-            else {
-                pinmask = AntiAttacks(preoccupied, knightsquare);
-            }
+    for (int i = 0; i < alfilcount; i++) {
+        int alfilsquare = popcount((ouralfils & -ouralfils)-1);
+        if (pinnedpieces&(1ULL << alfilsquare)) {
+            ouralfils^=(1ULL << alfilsquare);
+            continue;
         }
-        ourmask = KnightAttacks[knightsquare];
-        ourmask &= (pinmask&checkmask);
+        ourmask = AlfilAttacks[alfilsquare];
+        ourmask &= checkmask;
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
         for (int j = 0; j < capturenumber; j++) {
             int capturesquare = popcount((ourcaptures & -ourcaptures)-1);
-            int notation = knightsquare | (capturesquare << 6);
+            int notation = alfilsquare | (capturesquare << 6);
             notation |= (color << 12);
             notation |= (3 << 13);
             int captured = 0;
@@ -874,7 +649,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             int movenumber = popcount(ourmoves);
             for (int j = 0; j < movenumber; j++) {
                 int movesquare = popcount((ourmoves & -ourmoves)-1);
-                int notation = knightsquare | (movesquare << 6);
+                int notation = alfilsquare | (movesquare << 6);
                 notation |= (color << 12);
                 notation |= (3 << 13);
                 moves[depth][movecount]=notation;
@@ -883,34 +658,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
                 ourmoves^=(1ULL << movesquare);
             }
         }
-        ourknights^=(1ULL << knightsquare);
+        ouralfils^=(1ULL << alfilsquare);
     }
-    for (int i = 0; i < bishopcount; i++) {
-        int bishopsquare = popcount((ourbishops & -ourbishops)-1);
-        U64 pinmask = ~(0ULL);
-        if (pinnedpieces&(1ULL << bishopsquare)) {
-            int bishoprank = bishopsquare&56;
-            int bishopfile = bishopsquare&7;
-            if (bishoprank == pinrank) {
-                pinmask = GetRankAttacks(preoccupied, bishopsquare);
-            }
-            else if (bishopfile == pinfile) {
-                pinmask = FileAttacks(preoccupied, bishopsquare);
-            }
-            else if ((bishopfile-pinfile)*(bishoprank-pinrank)>0) {
-                pinmask = DiagAttacks(preoccupied, bishopsquare);
-            }
-            else {
-                pinmask = AntiAttacks(preoccupied, bishopsquare);
-            }
+    for (int i = 0; i < ferzcount; i++) {
+        int ferzsquare = popcount((ourferzes & -ourferzes)-1);
+        if (pinnedpieces&(1ULL << ferzsquare)) {
+            ourferzes^=(1ULL << ferzsquare);
+            continue;
         }
-        ourmask = (DiagAttacks(preoccupied, bishopsquare)|AntiAttacks(preoccupied, bishopsquare));
-        ourmask &= (pinmask&checkmask);
+        ourmask = FerzAttacks[ferzsquare];
+        ourmask &= checkmask;
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
         for (int j = 0; j < capturenumber; j++) {
             int capturesquare = popcount((ourcaptures & -ourcaptures)-1);
-            int notation = bishopsquare | (capturesquare << 6);
+            int notation = ferzsquare | (capturesquare << 6);
             notation |= (color << 12);
             notation |= (4 << 13);
             int captured = 0;
@@ -931,7 +693,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             int movenumber = popcount(ourmoves);
             for (int j = 0; j < movenumber; j++) {
                 int movesquare = popcount((ourmoves & -ourmoves)-1);
-                int notation = bishopsquare | (movesquare << 6);
+                int notation = ferzsquare | (movesquare << 6);
                 notation |= (color << 12);
                 notation |= (4 << 13);
                 moves[depth][movecount]=notation;
@@ -940,34 +702,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
                 ourmoves^=(1ULL << movesquare);
             }
         }
-        ourbishops^=(1ULL << bishopsquare);
+        ourferzes^=(1ULL << ferzsquare);
     }
-    for (int i = 0; i < rookcount; i++) {
-        int rooksquare = popcount((ourrooks & -ourrooks)-1);
-        U64 pinmask = ~(0ULL);
-        if (pinnedpieces&(1ULL << rooksquare)) {
-            int rookrank = rooksquare&56;
-            int rookfile = rooksquare&7;
-            if (rookrank == pinrank) {
-                pinmask = GetRankAttacks(preoccupied, rooksquare);
-            }
-            else if (rookfile == pinfile) {
-                pinmask = FileAttacks(preoccupied, rooksquare);
-            }
-            else if ((rookfile-pinfile)*(rookrank-pinrank)>0) {
-                pinmask = DiagAttacks(preoccupied, rooksquare);
-            }
-            else {
-                pinmask = AntiAttacks(preoccupied, rooksquare);
-            }
+    for (int i = 0; i < knightcount; i++) {
+        int knightsquare = popcount((ourknights & -ourknights)-1);
+        if (pinnedpieces&(1ULL << knightsquare)) {
+            ourknights^=(1ULL << knightsquare);
+            continue;
         }
-        ourmask = (GetRankAttacks(preoccupied, rooksquare)|FileAttacks(preoccupied, rooksquare));
-        ourmask &= (pinmask&checkmask);
+        ourmask = KnightAttacks[knightsquare];
+        ourmask &= checkmask;
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
         for (int j = 0; j < capturenumber; j++) {
             int capturesquare = popcount((ourcaptures & -ourcaptures)-1);
-            int notation = rooksquare | (capturesquare << 6);
+            int notation = knightsquare | (capturesquare << 6);
             notation |= (color << 12);
             notation |= (5 << 13);
             int captured = 0;
@@ -988,7 +737,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             int movenumber = popcount(ourmoves);
             for (int j = 0; j < movenumber; j++) {
                 int movesquare = popcount((ourmoves & -ourmoves)-1);
-                int notation = rooksquare | (movesquare << 6);
+                int notation = knightsquare | (movesquare << 6);
                 notation |= (color << 12);
                 notation |= (5 << 13);
                 moves[depth][movecount]=notation;
@@ -997,35 +746,27 @@ int generatemoves(int color, bool capturesonly, int depth) {
                 ourmoves^=(1ULL << movesquare);
             }
         }
-        ourrooks^=(1ULL << rooksquare);
+        ourknights^=(1ULL << knightsquare);
     }
-    for (int i = 0; i < queencount; i++) {
-        int queensquare = popcount((ourqueens & -ourqueens)-1);
+    for (int i = 0; i < rookcount; i++) {
+        int rooksquare = popcount((ourrooks & -ourrooks)-1);
+        ourmask = (GetRankAttacks(preoccupied, rooksquare)|FileAttacks(preoccupied, rooksquare));
         U64 pinmask = ~(0ULL);
-        if (pinnedpieces&(1ULL << queensquare)) {
-            int queenrank = queensquare&56;
-            int queenfile = queensquare&7;
-            if (queenrank == pinrank) {
-                pinmask = GetRankAttacks(preoccupied, queensquare);
-            }
-            else if (queenfile == pinfile) {
-                pinmask = FileAttacks(preoccupied, queensquare);
-            }
-            else if ((queenfile-pinfile)*(queenrank-pinrank)>0) {
-                pinmask = DiagAttacks(preoccupied, queensquare);
+        if (pinnedpieces&(1ULL << rooksquare)) {
+            int rookrank = rooksquare&56;
+            if (rookrank == pinrank) {
+                pinmask = GetRankAttacks(preoccupied, rooksquare);
             }
             else {
-                pinmask = AntiAttacks(preoccupied, queensquare);
+                pinmask = FileAttacks(preoccupied, rooksquare);
             }
         }
-        ourmask = (GetRankAttacks(preoccupied, queensquare)|FileAttacks(preoccupied, queensquare));
-        ourmask |= (DiagAttacks(preoccupied, queensquare)|AntiAttacks(preoccupied, queensquare));
         ourmask &= (pinmask&checkmask);
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
         for (int j = 0; j < capturenumber; j++) {
             int capturesquare = popcount((ourcaptures & -ourcaptures)-1);
-            int notation = queensquare | (capturesquare << 6);
+            int notation = rooksquare | (capturesquare << 6);
             notation |= (color << 12);
             notation |= (6 << 13);
             int captured = 0;
@@ -1046,7 +787,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
             int movenumber = popcount(ourmoves);
             for (int j = 0; j < movenumber; j++) {
                 int movesquare = popcount((ourmoves & -ourmoves)-1);
-                int notation = queensquare | (movesquare << 6);
+                int notation = rooksquare | (movesquare << 6);
                 notation |= (color << 12);
                 notation |= (6 << 13);
                 moves[depth][movecount]=notation;
@@ -1055,29 +796,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
                 ourmoves^=(1ULL << movesquare);
             }
         }
-        ourqueens^=(1ULL << queensquare);
-    }
-    if (position&(1 << (14+2*color))) {
-        if (!((opponentattacks|occupied)&((1ULL << (kingsquare+3))-(1ULL << kingsquare)))) {
-            int notation = kingsquare | ((kingsquare+2) << 6);
-            notation |= (color << 12);
-            notation |= (7 << 13);
-            notation |= (1 << 23);
-            moves[depth][movecount]=notation;
-            movescore[depth][movecount] = historytable[color][5][kingsquare+2];
-            movecount++;
-        }
-    }
-    if (position&(1 << (15+2*color))) {
-        if (!(((opponentattacks)&((1ULL << (kingsquare+1))-(1ULL << (kingsquare-2))))||(occupied&((1ULL << kingsquare)-(1ULL << (kingsquare-3)))))) {
-            int notation = kingsquare | ((kingsquare-2) << 6);
-            notation |= (color << 12);
-            notation |= (7 << 13);
-            notation |= (1 << 23);
-            moves[depth][movecount]=notation;
-            movescore[depth][movecount] = historytable[color][5][kingsquare-2];
-            movecount++;
-        }
+        ourrooks^=(1ULL << rooksquare);
     }
     return movecount;
 }
@@ -1087,19 +806,7 @@ string algebraic(int notation) {
     "a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6","a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7", "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8"};
     string header = convert[notation&63]+convert[(notation>>6)&63];
     if (notation&(1 << 20)) {
-        int piece = (notation>>21)&3;
-        if (piece == 0) {
-            header = header+"n";
-        }
-        else if (piece == 1) {
-            header = header+"b";
-        }
-        else if (piece == 2) {
-            header = header+"r";
-        }
-        else {
-            header = header+"q";
-        }
+        header = header+"q";
     }
     return header;
 }
@@ -1200,7 +907,7 @@ void parseFEN(string FEN) {
                 evalm[0]+=pstm[0][order[progress]];
                 evale[0]+=pste[0][order[progress]];
             }
-            if (hm == 'N') {
+            if (hm == 'A' || hm == 'B') {
                 Bitboards[3] |= (1ULL << order[progress]);
                 evalm[0]+=materialm[1];
                 evale[0]+=materiale[1];
@@ -1208,29 +915,29 @@ void parseFEN(string FEN) {
                 evale[0]+=pste[1][order[progress]];
                 gamephase[0]+=1;
             }
-            if (hm == 'B') {
+            if (hm == 'F' || hm == 'Q') {
                 Bitboards[4] |= (1ULL << order[progress]);
                 evalm[0]+=materialm[2];
                 evale[0]+=materiale[2];
                 evalm[0]+=pstm[2][order[progress]];
                 evale[0]+=pste[2][order[progress]];
-                gamephase[0]+=1;
+                gamephase[0]+=2;
             }
-            if (hm == 'R') {
+            if (hm == 'N') {
                 Bitboards[5] |= (1ULL << order[progress]);
                 evalm[0]+=materialm[3];
                 evale[0]+=materiale[3];
                 evalm[0]+=pstm[3][order[progress]];
                 evale[0]+=pste[3][order[progress]];
-                gamephase[0]+=2;
+                gamephase[0]+=4;
             }
-            if (hm == 'Q') {
+            if (hm == 'R') {
                 Bitboards[6] |= (1ULL << order[progress]);
                 evalm[0]+=materialm[4];
                 evale[0]+=materiale[4];
                 evalm[0]+=pstm[4][order[progress]];
                 evale[0]+=pste[4][order[progress]];
-                gamephase[0]+=4;
+                gamephase[0]+=6;
             }
             if (hm == 'K') {
                 Bitboards[7] |= (1ULL << order[progress]);
@@ -1248,7 +955,7 @@ void parseFEN(string FEN) {
                 evalm[1]+=pstm[0][56^order[progress]];
                 evale[1]+=pste[0][56^order[progress]];
             }
-            if (hm == 'n') {
+            if (hm == 'a' || hm == 'b') {
                 Bitboards[3] |= (1ULL << order[progress]);
                 evalm[1]+=materialm[1];
                 evale[1]+=materiale[1];
@@ -1256,29 +963,29 @@ void parseFEN(string FEN) {
                 evale[1]+=pste[1][56^order[progress]];
                 gamephase[1]+=1;
             }
-            if (hm == 'b') {
+            if (hm == 'f' || hm == 'q') {
                 Bitboards[4] |= (1ULL << order[progress]);
                 evalm[1]+=materialm[2];
                 evale[1]+=materiale[2];
                 evalm[1]+=pstm[2][56^order[progress]];
                 evale[1]+=pste[2][56^order[progress]];
-                gamephase[1]+=1;
+                gamephase[1]+=2;
             }
-            if (hm == 'r') {
+            if (hm == 'n') {
                 Bitboards[5] |= (1ULL << order[progress]);
                 evalm[1]+=materialm[3];
                 evale[1]+=materiale[3];
                 evalm[1]+=pstm[3][56^order[progress]];
                 evale[1]+=pste[3][56^order[progress]];
-                gamephase[1]+=2;
+                gamephase[1]+=4;
             }
-            if (hm == 'q') {
+            if (hm == 'r') {
                 Bitboards[6] |= (1ULL << order[progress]);
                 evalm[1]+=materialm[4];
                 evale[1]+=materiale[4];
                 evalm[1]+=pstm[4][56^order[progress]];
                 evale[1]+=pste[4][56^order[progress]];
-                gamephase[1]+=4;
+                gamephase[1]+=6;
             }
             if (hm == 'k') {
                 Bitboards[7] |= (1ULL << order[progress]);
@@ -1296,41 +1003,7 @@ void parseFEN(string FEN) {
         color = 1;
     }
     position = color;
-    tracker+=2;
-    while (FEN[tracker]!=' ') {
-        char hm = FEN[tracker];
-        if (hm == 'K') {
-            castling |= 1;
-        }
-        if (hm == 'Q') {
-            castling |= 2;
-        }
-        if (hm == 'k') {
-            castling |= 4;
-        }
-        if (hm == 'q') {
-            castling |= 8;
-        }
-        tracker++;
-    }
-    tracker++;
-    position |= (castling << 14);
-    if (FEN[tracker] == '-') {
-        tracker+=2;
-    }
-    else {
-        int epfile = 0;
-        for (int j = 0; j < 8; j++) {
-            if (file[j] == FEN[tracker]) {
-                epfile = j;
-            }
-        }
-        tracker++;
-        int eprank = (int)(FEN[tracker])-49;
-        int epsquare = 8*eprank+epfile;
-        position |= (epsquare << 8);
-        tracker+=2;
-    }
+    tracker+=6;
     int halfmove = (int)(FEN[tracker])-48;
     tracker++;
     if (FEN[tracker]!=' ') {
@@ -1342,13 +1015,11 @@ void parseFEN(string FEN) {
     history[0] = position;
 }
 int evaluate(int color) {
-    int midphase = min(24, gamephase[0]+gamephase[1]);
-    int endphase = 24-midphase;
+    int midphase = min(48, gamephase[0]+gamephase[1]);
+    int endphase = 48-midphase;
     int mideval = evalm[color]-evalm[color^1];
     int endeval = evale[color]-evale[color^1];
-    int bishops = 37*(popcount(Bitboards[color]&Bitboards[4])/2-popcount(Bitboards[color^1]&Bitboards[4])/2);
-    int e = (min(gamephase[0], gamephase[1]) == 0) ? 2 : 1;
-    return (mideval*midphase+e*endeval*endphase)/24+bishops+11;
+    return (mideval*midphase+endeval*endphase)/48+10;
 }
 int quiesce(int alpha, int beta, int color, int depth) {
     int score = evaluate(color);
@@ -1405,14 +1076,17 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (repetitions() > 1) {
         return 0;
     }
+    if ((Bitboards[0]|Bitboards[1]) == Bitboards[7]) {
+        return 0;
+    }
+    if ((Bitboards[color]&Bitboards[7]) == Bitboards[color]) {
+        return -1*(depth+28000-initialdepth);
+    }
     if (depth == 0) {
         return quiesce(alpha, beta, color, 0);
     }
     int score = -30000;
     int bestscore = -30000;
-    if (Bitboards[color]&Bitboards[7]==0ULL) {
-        return -29000;
-    }
     int allnode = 0;
     int movcount;
     int index = zobristhash%TTsize;
@@ -1453,12 +1127,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     movcount = generatemoves(color, 0, depth);
     if (movcount == 0) {
-        if (checkers(color)) {
-            return -1*(depth+28000-initialdepth);
-        }
-        else {
-            return 0;
-        }
+        return -1*(depth+28000-initialdepth);
     }
     if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
         makenullmove();
@@ -1869,7 +1538,7 @@ void xboard() {
     string xcommand;
     getline(cin, xcommand);
     if (xcommand.substr(0, 8) == "protover") {
-        cout << "feature ping=1 setboard=1 analyze=0 sigint=0 sigterm=0 myname=\"sscg13 engine\" variants=\"normal\" done=1\n";
+        cout << "feature ping=1 setboard=1 analyze=0 sigint=0 sigterm=0 myname=\"sscg13 engine\" variants=\"shatranj\" done=1\n";
     }
     if (xcommand == "new") {
         initializett();
@@ -1982,7 +1651,7 @@ int main() {
     srand(time(0));
     getline(cin, proto);
     if (proto == "uci") {
-        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "uciok\n";
+        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "option name UCI_Variant type combo default shatranj var shatranj \n" << "uciok\n";
         while (true) {
             uci();
         }
