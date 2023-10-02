@@ -1121,7 +1121,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     int margin = 40+60*depth;
     if (depth < initialdepth && score == -30000) {
-        if (evaluate(color)-margin >= beta && abs(beta) < 27000) {
+        if (evaluate(color)-margin >= beta && abs(beta) < 400) {
             return evaluate(color)-margin;
         }
     }
