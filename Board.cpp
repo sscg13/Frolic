@@ -261,7 +261,7 @@ void initializeboard() {
     Bitboards[5] = (Rank1 | Rank8) & (FileB | FileG);
     Bitboards[6] = (Rank1 | Rank8) & (FileA | FileH);
     Bitboards[7] = (Rank1 | Rank8) & FileD;
-    position = 0x0000000;
+    position = 0;
     history[0] = position;
     int startmatm = (8*materialm[0]+2*(materialm[1]+materialm[3]+materialm[4])+materialm[2]);
     int startmate = (8*materiale[0]+2*(materiale[1]+materiale[3]+materiale[4])+materiale[2]);
@@ -553,7 +553,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
     rookcount = popcount(ourrooks);
     for (int i = 0; i < pawncount; i++) {
         int pawnsquare = popcount((ourpawns & -ourpawns)-1);
-        if ((pinnedpieces&(1ULL << pawnsquare)) && (pawnsquare&56 == pinrank)) {
+        if ((pinnedpieces&(1ULL << pawnsquare)) && ((pawnsquare&56) == pinrank)) {
             ourpawns^=(1ULL << pawnsquare);
             continue;
         }
@@ -1019,7 +1019,9 @@ int evaluate(int color) {
     int endphase = 48-midphase;
     int mideval = evalm[color]-evalm[color^1];
     int endeval = evale[color]-evale[color^1];
-    return (mideval*midphase+endeval*endphase)/48+10;
+    int progress = 200-(position >> 1);
+    int base = (mideval*midphase+endeval*endphase)/48+10;
+    return (base*progress)/200;
 }
 int quiesce(int alpha, int beta, int color, int depth) {
     int score = evaluate(color);
