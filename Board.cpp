@@ -73,6 +73,7 @@ int nodecount = 0;
 int bestmove = 0;
 U64 zobristhash = 0ULL;
 int movetime = 0;
+int nodetime = 0;
 string proto = "uci";
 bool gosent = false;
 bool stopsearch = false;
@@ -1672,6 +1673,17 @@ void uci() {
         initializett();
         initializeboard();
     }
+    if (ucicommand.substr(0, 26) == "setoption name Force Nodes") {
+        int sum = 0;
+        int add = 1;
+        int reader = ucicommand.length()-1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        nodetime = sum;
+    }
     if (ucicommand.substr(0, 17) == "position startpos") {
         initializeboard();
         int color = 0;
@@ -1832,7 +1844,12 @@ void uci() {
             reader--;
         }
         int color = position&1;
-        iterative(sum, 120000, color);
+        if (nodetime == 0) {
+            iterative(sum, 120000, color);
+        }
+        else {
+            iterative(nodetime, 120000, color);
+        }
     }
     if (ucicommand.substr(0, 11) == "go infinite") {
         int color = position&1;
@@ -1982,7 +1999,7 @@ int main() {
     srand(time(0));
     getline(cin, proto);
     if (proto == "uci") {
-        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "uciok\n";
+        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n\n" << "option name Force Nodes type spin default 0 min 10000 max 25000000\n" << "uciok\n";
         while (true) {
             uci();
         }
