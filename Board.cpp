@@ -1,10 +1,11 @@
 #include <iostream>
-#include <cstdlib>
+#include <algorithm>
 #include <time.h>
 #include <bit>
 #include <random>
 #include <string>
 #include <chrono>
+#include <fstream>
 using U64 = uint64_t;
 using namespace std;
 
@@ -100,10 +101,13 @@ int pste[6][64] = {{0,0,0,0,0,0,0,0,-23,-7,-16,-37,-43,-19,-6,-13,-10,9,1,-8,-16
 -8,-10,-5,-3,-12,0,3,-7,-11,-7,-8,2,-5,8,-7,1,-2,6,11,14,9,17,5,8,3,8,9,16,15,13,9,10},
 {-33,-31,-27,-22,-24,-29,-34,-42,-23,-19,-6,1,-4,-9,-17,-30,-13,-5,2,7,4,0,-7,-17,-8,-2,11,14,15,9,4,-9,
 -6,3,9,19,17,12,5,-4,-7,-1,4,11,8,10,1,-7,-18,-10,-7,0,-2,4,-8,-23,-29,-24,-18,-11,-16,-13,-20,-31}};
+int lmr_reductions[32][256];
 int historytable[2][6][64];
 int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0};
 int phase[6] = {0, 1, 2, 4, 6, 0};
 int gamephase[2] = {0, 0};
+int block[17] = {24, 24, 24, 24, 23, 23, 23, 22, 22, 21, 20, 18, 16, 13, 10, 8, 6};
+ofstream bookoutput;
 struct TTentry {
     U64 key;
     int score;
@@ -283,6 +287,13 @@ void initializeboard() {
     gamephase[1] = 24;
     gamelength = 0;
     zobrist[0] = scratchzobrist();
+}
+void initializelmr() {
+    for (int i = 0; i < maxdepth; i++) {
+        for (int j = 0; j < 256; j++) {
+            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(1+log(i)*log(j)/4.00);
+        }
+    }
 }
 int repetitions() {
     int repeats = 0;
@@ -1014,13 +1025,70 @@ void parseFEN(string FEN) {
     zobrist[0] = zobristhash;
     history[0] = position;
 }
+string getFEN() {
+    int order[64] = {56, 57, 58, 59, 60, 61, 62, 63, 48, 49, 50, 51, 52, 53, 54, 55, 40, 41, 42, 43, 44, 45, 46, 47,
+    32, 33, 34, 35, 36, 37, 38, 39, 24, 25, 26, 27, 28, 29, 30, 31, 16, 17, 18, 19, 20, 21, 22, 23,
+    8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7};
+    string FEN = "";
+    int empt = 0;
+    char convert[2][6] = {{'P', 'B', 'Q', 'N', 'R', 'K'}, {'p', 'b', 'q', 'n', 'r', 'k'}};
+    int color;
+    int piece;
+    for (int i = 0; i < 64; i++) {
+        color = -1;
+        for (int j = 0; j < 2; j++) {
+            if (Bitboards[j]&(1ULL << order[i])) {
+                color = j;
+            }
+        }
+        if (color >= 0) {
+            if (empt > 0) {
+                FEN = FEN + (char)(empt+48);
+                empt = 0;
+            }
+            for (int j = 0; j < 6; j++) {
+                if (Bitboards[j+2]&(1ULL << order[i])) {
+                    piece = j;
+                }
+            }
+            FEN = FEN + (convert[color][piece]);
+        }
+        else {
+            empt++;
+            if ((i&7) == 7) {
+                FEN = FEN + (char)(empt+48);
+                empt = 0;
+            }
+        }
+        if (((i&7) == 7) && (i < 63)) {
+            FEN = FEN + '/';
+        }
+    }
+    FEN = FEN + ' ';
+    if (position&1) {
+        FEN = FEN + "b - - ";
+    }
+    else {
+        FEN = FEN + "w - - ";
+    }
+    int halfmove = position >> 1;
+    string bruh = "";
+    while (halfmove > 0) {
+        bruh = bruh + (char)(halfmove%10+48);
+        halfmove /= 10;
+    }
+    reverse(bruh.begin(), bruh.end());
+    FEN = FEN + bruh + " 1";
+    return FEN;
+}
 int evaluate(int color) {
     int midphase = min(48, gamephase[0]+gamephase[1]);
     int endphase = 48-midphase;
     int mideval = evalm[color]-evalm[color^1];
     int endeval = evale[color]-evale[color^1];
     int progress = 200-(position >> 1);
-    int base = (mideval*midphase+endeval*endphase)/48+10;
+    int pawnblock = popcount(shift_n(Bitboards[2]&Bitboards[0])&Bitboards[1])+popcount(shift_s(Bitboards[2]&Bitboards[1])&Bitboards[0]);
+    int base = (mideval*midphase+(block[pawnblock]*endeval*endphase)/24)/48+10;
     return (base*progress)/200;
 }
 int quiesce(int alpha, int beta, int color, int depth) {
@@ -1097,6 +1165,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     int ttdepth = TT[index].depth;
     int ttage = max(gamelength-TT[index].age, 0);
     bool update = (depth > (ttdepth-ttage/3));
+    bool incheck = (checkers(color) != 0ULL);
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
@@ -1121,7 +1190,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    int margin = 40+60*depth;
+    int margin = 50+70*depth;
     if (depth < initialdepth && score == -30000) {
         if (evaluate(color)-margin >= beta && abs(beta) < 400) {
             return evaluate(color)-margin;
@@ -1131,7 +1200,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (movcount == 0) {
         return -1*(depth+28000-initialdepth);
     }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
+    if ((!incheck && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
         makenullmove();
         score = -alphabeta(depth-1-(depth+1)/3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
@@ -1324,6 +1393,23 @@ void iterative(int nodelimit, int timelimit, int color) {
     if (proto == "xboard") {
         cout << "move " << algebraic(bestmove1) << "\n";
         makemove(bestmove1, 0);
+    }
+}
+void bookgen(int a, int b, int depth) {
+    int color = position&1;
+    if (depth == 0) {
+        int eval = quiesce(-29000, 29000, color, 0);
+        if (eval > a && eval < b) {
+            bookoutput << getFEN() << "\n";
+        }
+    }
+    else {
+        int movcount = generatemoves(color, 0, depth);
+        for (int i = 0; i < movcount; i++) {
+            makemove(moves[depth][i], 1);
+            bookgen(-b, -a, depth-1);
+            unmakemove(moves[depth][i]);
+        }
     }
 }
 void uci() {
@@ -1534,6 +1620,42 @@ void uci() {
         }
         perftnobulk(sum, sum, color);
     }
+    if (ucicommand.substr(0, 8) == "get book") {
+        bookoutput.open("shatranj book.txt", ofstream::app);
+        int sum = 0;
+        int add = 1;
+        int reader = 9;
+        while (ucicommand[reader] != ' ') {
+            reader++;
+        }
+        int reader2 = reader-1;
+        sum = 0;
+        add = 1;
+        while (ucicommand[reader2] != ' ') {
+            sum+=((int)(ucicommand[reader2]-48))*add;
+            add*=10;
+            reader2--;
+        }
+        reader++;
+        while (ucicommand[reader] != ' ') {
+            reader++;
+        }
+        reader--;
+        int a = sum;
+        sum = 0;
+        add = 1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        int b = sum;
+        int depth = (int)(ucicommand[ucicommand.length()-1]-48);
+        cout << a << " " << b << " " << depth << "\n";
+        bookgen(a, b, depth);
+        cout << "done \n";
+        bookoutput.close();
+    }
 }
 void xboard() {
     string xcommand;
@@ -1648,6 +1770,7 @@ int main() {
     initializerankattacks();
     initializeboard();
     initializezobrist();
+    initializelmr();
     initializett();
     srand(time(0));
     getline(cin, proto);
