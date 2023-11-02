@@ -111,6 +111,7 @@ int pste[6][64] = {{0,0,0,0,0,0,0,0,13,8,8,10,13,0,2,-7,4,7,-6,1,0,-5,-1,-8,13,9
 -8,22,24,27,26,33,26,3,10,17,23,15,20,45,44,13,-12,17,14,17,17,38,23,11,-74,-35,-18,-18,-11,15,4,-17}};
 int castlechange[64] = {13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,7, 15, 15, 15,  3, 15, 15, 11};
+int lmr_reductions[32][256];
 int historytable[2][6][64];
 int startpiece[16] = {3, 1, 2, 4, 5, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0};
 int phase[6] = {0, 1, 1, 2, 4, 0};
@@ -337,6 +338,13 @@ void initializeboard() {
     gamephase[1] = 12;
     gamelength = 0;
     zobrist[0] = scratchzobrist();
+}
+void initializelmr() {
+    for (int i = 0; i < maxdepth; i++) {
+        for (int j = 0; j < 256; j++) {
+            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(0.53+log(i)*log(j)/2.44);
+        }
+    }
 }
 int repetitions() {
     int repeats = 0;
@@ -1492,13 +1500,17 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((i > 3+movcount/4) && (movescore[depth][i] < 2500) && depth > 1) ? 2 : 1;
+        int r = ((movescore[depth][i] < 2500) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
+        if ((r > 0) && (checkers(color) != 0ULL || beta-alpha > 1)) {
+            r--;
+        }
+        //bool prune = ((beta-alpha < 2) && (depth < 5) && (i > 6+4*depth) && movescore[depth][i] < 1000);
         if (!stopsearch) {
             makemove(moves[depth][i], true);
             if (nullwindow) {
-                score = -alphabeta(depth-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
+                score = -alphabeta(depth-1-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
                 if (score > alpha && score < beta) {
-                    score = -alphabeta(depth-r, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+                    score = -alphabeta(depth-1-r, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
                 }
             }
             else {
@@ -1517,7 +1529,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                         }
                         int target = (moves[depth][i]>>6)&63;
                         int piece = (moves[depth][i]>>13)&7;
-                        historytable[color][piece-2][target]+=(depth*depth*depth);
+                        historytable[color][piece-2][target]+=(depth*depth*depth-(depth*depth*depth*historytable[color][piece-2][target])/27000);
                         return score;
                     }
                     alpha = score;
@@ -1994,12 +2006,13 @@ int main() {
     initializemasks();
     initializerankattacks();
     initializeboard();
+    initializelmr();
     initializezobrist();
     initializett();
     srand(time(0));
     getline(cin, proto);
     if (proto == "uci") {
-        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n\n" << "option name Force Nodes type spin default 0 min 10000 max 25000000\n" << "uciok\n";
+        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n\n" << "option name Force Nodes type spin default 1000000 min 10000 max 25000000\n" << "uciok\n";
         while (true) {
             uci();
         }
