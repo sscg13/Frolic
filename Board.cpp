@@ -1449,14 +1449,14 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         }
         else {
             int margin = 40+60*(depth-ttdepth);
-            if ((nodetype&1) && (score-margin >= beta) && abs(beta) < 27000) {
+            if ((nodetype&1) && (score-margin >= beta) && (abs(beta) < 27000) && checkers(color) == 0ULL) {
                 return score-margin;
             }
         }
     }
     int margin = 40+60*depth;
     if (depth < initialdepth && score == -30000) {
-        if (evaluate(color)-margin >= beta && abs(beta) < 27000) {
+        if (evaluate(color)-margin >= beta && (abs(beta) < 27000) && checkers(color) == 0ULL) {
             return evaluate(color)-margin;
         }
     }
