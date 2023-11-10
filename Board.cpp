@@ -1363,7 +1363,7 @@ int quiesce(int alpha, int beta, int color, int depth) {
     int score = evaluate(color);
     int bestscore = -30000;
     int movcount;
-    if (depth > 3) {
+    if (depth > 4) {
         return score;
     }
     if (checkers(color)) {
@@ -1382,7 +1382,7 @@ int quiesce(int alpha, int beta, int color, int depth) {
         }
         movcount = generatemoves(color, 1, maxdepth+depth);
     }
-    if (depth == 0) {
+    if (depth < 2) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
             int temp1 = 0;
