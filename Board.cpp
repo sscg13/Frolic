@@ -69,7 +69,8 @@ int movetime = 0;
 string proto = "uci";
 bool gosent = false;
 bool stopsearch = false;
-//1 bit color, 7 bits halfmove, 6 bits ep, 4 bits castling KQkq
+bool suppressoutput = false;
+//1 bit color, 7 bits halfmove
 //6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit castling, 1 bit double pawn push,
 //1 bit en passant, 1 bit promotion, 2 bits promoted piece, 1 bit capture, 3 bits piece captured
 //26 bits total for now?
@@ -108,6 +109,9 @@ int phase[6] = {0, 1, 2, 4, 6, 0};
 int gamephase[2] = {0, 0};
 int block[17] = {24, 24, 24, 24, 23, 23, 23, 22, 22, 21, 20, 18, 16, 13, 10, 8, 6};
 ofstream bookoutput;
+ifstream datainput;
+string outputfile;
+string inputfile;
 struct TTentry {
     U64 key;
     int score;
@@ -291,7 +295,7 @@ void initializeboard() {
 void initializelmr() {
     for (int i = 0; i < maxdepth; i++) {
         for (int j = 0; j < 256; j++) {
-            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(1+log(i)*log(j)/4.00);
+            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(0.42+log(i)*log(j)/2.7);
         }
     }
 }
@@ -361,7 +365,7 @@ void makemove(int notation, bool reversible) {
     zobristhash^=(hashes[piece][from]^hashes[piece][to]);
     int captured = (notation >> 17) & 7;
     int promoted = (notation >> 21) & 3;
-    int halfmove = (position >> 1) & 127;
+    int halfmove = (position >> 1);
     position^=(halfmove << 1);
     halfmove++;
     position&=0x0003C0FF;
@@ -1073,10 +1077,10 @@ string getFEN() {
     }
     int halfmove = position >> 1;
     string bruh = "";
-    while (halfmove > 0) {
+    do {
         bruh = bruh + (char)(halfmove%10+48);
         halfmove /= 10;
-    }
+    } while (halfmove > 0);
     reverse(bruh.begin(), bruh.end());
     FEN = FEN + bruh + " 1";
     return FEN;
@@ -1185,14 +1189,14 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         }
         else {
             int margin = 40+60*(depth-ttdepth);
-            if ((nodetype&1) && (score-margin >= beta) && abs(beta) < 27000) {
+            if ((nodetype&1) && (score-margin >= beta) && (abs(beta) < 27000)) {
                 return score-margin;
             }
         }
     }
     int margin = 50+70*depth;
     if (depth < initialdepth && score == -30000) {
-        if (evaluate(color)-margin >= beta && abs(beta) < 400) {
+        if (evaluate(color)-margin >= beta && (abs(beta) < 400)) {
             return evaluate(color)-margin;
         }
     }
@@ -1231,6 +1235,10 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
+        int r = ((movescore[depth][i] < 2500) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
+        if ((r > 0) && (incheck || beta-alpha > 1)) {
+            r--;
+        }
         if (!stopsearch) {
             makemove(moves[depth][i], true);
             if (nullwindow) {
@@ -1255,7 +1263,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                         }
                         int target = (moves[depth][i]>>6)&63;
                         int piece = (moves[depth][i]>>13)&7;
-                        historytable[color][piece-2][target]+=(depth*depth*depth);
+                        historytable[color][piece-2][target]+=(depth*depth*depth-(depth*depth*depth*historytable[color][piece-2][target])/27000);
                         return score;
                     }
                     alpha = score;
@@ -1344,7 +1352,7 @@ void iterative(int nodelimit, int timelimit, int color) {
             for (int i = last-1; i >= 0; i--) {
                 unmakemove(pvtable[i]);
             }
-            if (proto == "uci") {
+            if (proto == "uci" && !suppressoutput) {
                 if (abs(score) <= 27000) {
                     cout << "info depth " << depth << " nodes " << nodecount << " time " << timetaken.count() << " score cp " << score << " pv ";
                     for (int i = 0; i < last; i++) {
@@ -1383,17 +1391,80 @@ void iterative(int nodelimit, int timelimit, int color) {
     }
     auto now = chrono::steady_clock::now();
     auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
-    if (timetaken.count() > 0 && proto == "uci") {
+    if (timetaken.count() > 0 && (proto == "uci") && !suppressoutput) {
         int nps = 1000*(nodecount/timetaken.count());
         cout << "info nodes " << nodecount << " nps " << nps << "\n";
     }
-    if (proto == "uci") {
+    if (proto == "uci" && !suppressoutput) {
         cout << "bestmove " << algebraic(bestmove1) << "\n";
     }
     if (proto == "xboard") {
         cout << "move " << algebraic(bestmove1) << "\n";
         makemove(bestmove1, 0);
     }
+    bestmove = bestmove1;
+}
+void autoplay(int nodes) {
+    suppressoutput = true;
+    initializett();
+    resethistory();
+    initializeboard();
+    string game = "";
+    string result = "";
+    for (int i = 0; i < 8; i++) {
+        int num_moves = generatemoves(i&1, 0, 0);
+        int rand_move = rand()%num_moves;
+        makemove(moves[0][rand_move], 0);
+        game += algebraic(moves[0][rand_move]);
+        game += " ";
+    }
+    bool finished = false;
+    while (!finished) {
+        int color = position&1;
+        iterative(nodes, 120000, color);
+        makemove(bestmove, 0);
+        if (bestmove > 0) {
+            game = game + algebraic(bestmove);
+            game+=" ";
+        }
+        if (popcount(Bitboards[0]|Bitboards[1]) == 2) {
+            finished = true;
+            result = "d";
+        }
+        else if (Bitboards[color] == (Bitboards[color]&Bitboards[7])) {
+            finished = true;
+            if (color == 0) {
+                result = "b";
+            }
+            else {
+                result = "w";
+            }
+        }
+        else if (repetitions() >= 2) {
+            finished = true;
+            result = "d";
+        }
+        else if (generatemoves(color^1, 0, 0) == 0) {
+            finished = true;
+            if (color == 0) {
+                result = "w";
+            }
+            else {
+                result = "b";
+            }
+        }
+        else if ((position >> 1) >= 100) {
+            finished = true;
+            result = "d";
+        }
+    }
+    game += result;
+    cout << game << "\n";
+    bookoutput << game << "\n";
+    suppressoutput = false;
+    initializett();
+    resethistory();
+    initializeboard();
 }
 void bookgen(int a, int b, int depth) {
     int color = position&1;
@@ -1409,6 +1480,38 @@ void bookgen(int a, int b, int depth) {
             makemove(moves[depth][i], 1);
             bookgen(-b, -a, depth-1);
             unmakemove(moves[depth][i]);
+        }
+    }
+}
+void extractTexel() {
+    while (datainput.good()) {
+        initializeboard();
+        string game;
+        getline(datainput, game);
+        int color = position&1;
+        string mov = "";
+        char result = game[game.length()-1];
+        for (int i = 0; i < game.length(); i++) {
+            if (game[i]==' ') {
+                int len = generatemoves(color, 0, 0);
+                int played = -1;
+                for (int j = 0; j < len; j++) {
+                    if (algebraic(moves[0][j])==mov) {
+                        played = j;
+                    }
+                }
+                if (played >= 0) {
+                    if (((moves[0][played]&(1 << 16)) == 0) && ((position >> 1) < 15) && (gamelength > 10)) {
+                        bookoutput << result << " " << getFEN() << "\n";
+                    }
+                    makemove(moves[0][played], false);
+                    color^=1;
+                }
+                mov = "";
+            }
+            else {
+                mov+=game[i];
+            }
         }
     }
 }
@@ -1655,6 +1758,36 @@ void uci() {
         bookgen(a, b, depth);
         cout << "done \n";
         bookoutput.close();
+    }
+    if (ucicommand.substr(0, 10) == "set output") {
+        outputfile = ucicommand.substr(11, ucicommand.length()-11);
+    }
+    if (ucicommand.substr(0, 9) == "set input") {
+        inputfile = ucicommand.substr(10, ucicommand.length()-10);
+    }
+    if (ucicommand.substr(0, 8) == "generate") {
+        bookoutput.open(outputfile, ofstream::app);
+        int sum = 0;
+        int add = 1;
+        int reader = ucicommand.length()-1;
+        while (ucicommand[reader] != ' ') {
+            sum+=((int)(ucicommand[reader]-48))*add;
+            add*=10;
+            reader--;
+        }
+        for (int i = 0; i < sum; i++) {
+            autoplay(400000);
+        }
+        bookoutput.close();
+        cout << "Generation done \n";
+    }
+    if (ucicommand == "extract") {
+        bookoutput.open(outputfile, ofstream::app);
+        datainput.open(inputfile, ifstream::app);
+        extractTexel();
+        datainput.close();
+        bookoutput.close();
+        cout << "Extraction done \n";
     }
 }
 void xboard() {
