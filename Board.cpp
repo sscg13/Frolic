@@ -283,7 +283,7 @@ void initializeboard() {
 void initializelmr() {
     for (int i = 0; i < maxdepth; i++) {
         for (int j = 0; j < 256; j++) {
-            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(0.42+log(i)*log(j)/2.7);
+            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(0.67+log(i)*log(j)*0.53);
         }
     }
 }
@@ -1192,9 +1192,9 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (movcount == 0) {
         return -1*(depth+28000-initialdepth);
     }
-    if ((!incheck && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
+    if ((!incheck && gamephase[color] > 0) && (depth > 1 && depth < initialdepth) && nmp) {
         makenullmove();
-        score = -alphabeta(depth-1-(depth+1)/3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
+        score = -alphabeta(max(0, depth-2-(depth+1)/3), initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
         if (score >= beta) {
             return beta;
@@ -1223,8 +1223,8 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((movescore[depth][i] < 2500) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
-        if ((r > 0) && (incheck || beta-alpha > 1)) {
+        int r = ((movescore[depth][i] < 10000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
+        if ((r > 0) && (beta-alpha > 1)) {
             r--;
         }
         if (!stopsearch) {
