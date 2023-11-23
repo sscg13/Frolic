@@ -1141,8 +1141,8 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if ((Bitboards[0]|Bitboards[1]) == Bitboards[7]) {
         return 0;
     }
-    if ((Bitboards[color]&Bitboards[7]) == Bitboards[color]) {
-        return -1*(depth+28000-initialdepth);
+    if ((Bitboards[color^1]&Bitboards[7]) == Bitboards[color^1]) {
+        return (depth+28000-initialdepth);
     }
     if (depth == 0) {
         return quiesce(alpha, beta, color, 0);
