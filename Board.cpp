@@ -62,6 +62,8 @@ int killers[32][2];
 int position = 0;
 int evalm[2] = {0, 0};
 int evale[2] = {0, 0};
+int mobilitym[2] = {0, 0};
+int mobilitye[2] = {0, 0};
 int nodecount = 0;
 int bestmove = 0;
 U64 zobristhash = 0ULL;
@@ -76,8 +78,8 @@ bool suppressoutput = false;
 //26 bits total for now?
 int movecount;
 auto start = chrono::steady_clock::now();
-int materialm[6] = {55, 78, 126, 444, 661, 20000};
-int materiale[6] = {73, 106, 129, 417, 937, 20000};
+int materialm[6] = {78, 77, 144, 415, 657, 20000};
+int materiale[6] = {85, 113, 139, 402, 905, 20000};
 int pstm[6][64] = {{0,0,0,0,0,0,0,0,-61,-2,14,19,-9,-5,-7,-35,-54,24,12,23,8,3,-3,-34,-28,-12,18,48,18,9,-2,-35,0,-17,13,53,-7,4,-19,-34,-14,-4,4,-2,8,-26,-16,-23,9,18,20,28,29,14,9,-2,0,0,0,0,0,0,0,0},
 {-41,-23,-7,-17,-19,-1,-25,-45,-38,-36,-4,-7,-5,1,-32,-37,11,-15,9,-12,-11,6,-17,-0,-17,-12,13,26,23,18,-13,-18,-19,-2,-14,24,23,-6,-36,-20,-25,-8,12,19,17,19,-9,-23,-27,-21,7,-7,-8,2,-28,-42,-39,-33,-17,-11,-16,-22,-31,-38},
 {-39,-23,-30,-22,3,-21,-35,-34,-29,-21,-9,-1,-19,-11,-21,-33,-30,-13,15,2,16,6,2,-22,-23,-11,5,34,6,12,-2,-17,-17,-8,13,5,50,9,2,-19,-5,-6,-5,11,-1,17,3,-9,-27,-17,-4,-1,-4,-2,-11,-28,-39,-27,-24,-16,-12,-26,-24,-39},
@@ -90,12 +92,20 @@ int pste[6][64] = {{0,0,0,0,0,0,0,0,6,-12,-1,-24,-38,8,-4,-24,-25,-13,4,12,-17,-
 {-43,-11,-10,-3,-3,-14,-18,-37,-28,-12,-8,-1,9,2,-11,-33,-20,-10,17,5,9,24,-7,-9,-11,-5,20,28,31,16,11,-19,-6,4,33,48,55,18,32,2,-24,2,11,32,29,30,7,-18,-35,-7,0,17,9,11,-6,-25,-49,-26,-17,-2,3,3,-10,-46},
 {-31,-18,-5,-2,-13,-4,-13,-26,-27,-9,-6,1,1,4,-11,1,-12,-10,-11,-2,-13,6,-0,10,-5,-5,-2,-4,-7,-2,1,17,-1,-4,-2,-3,-2,3,0,4,1,-3,2,2,2,7,6,9,9,9,11,9,5,8,11,13,23,17,17,17,15,17,18,27},
 {-38,-37,-45,-25,-20,-28,-36,-43,-30,-32,-22,-20,-9,-13,-16,-31,-25,-3,2,8,6,1,6,-21,-27,-2,23,37,26,20,0,-9,-3,15,28,25,38,13,6,-11,-5,9,11,24,1,16,-8,-12,-20,-9,-6,-6,-3,-1,-5,-23,-30,-26,-17,-13,-17,-14,-20,-31}};
+int ferzmobm[5] = {-17,-9,-2,3,8};
+int ferzmobe[5] = {-15,-8,1,5,10};
+int alfilmobm[5] = {-17,-11,-5,4,11};
+int alfilmobe[5] = {-10,-7,-4,6,10};
+int knightmobm[9] = {-35,-21,-12,-5,0,5,12,21,35};
+int knightmobe[9] = {-41,-26,-10,1,9,17,25,31,35};
+int rookmobm[15] = {-21,-22,-14,-18,-12,-5,-1,2,5,9,11,12,15,19,24};
+int rookmobe[15] = {-40,-32,-22,-15,-9,-5,-1,3,7,13,20,23,28,32,37};
+int kingmobe[9] = {-61,-38,-15,-6,3,13,22,28,33};
 int lmr_reductions[32][256];
 int historytable[2][6][64];
 int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0};
 int phase[6] = {0, 1, 2, 4, 6, 0};
 int gamephase[2] = {0, 0};
-int block[17] = {24, 24, 24, 24, 23, 23, 23, 22, 22, 21, 20, 18, 16, 13, 10, 8, 6};
 ofstream bookoutput;
 ifstream datainput;
 string outputfile;
@@ -283,7 +293,7 @@ void initializeboard() {
 void initializelmr() {
     for (int i = 0; i < maxdepth; i++) {
         for (int j = 0; j < 256; j++) {
-            lmr_reductions[i][j] = round(0.3+log(i+1)*log(j+1)*0.41);
+            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(0.67+log(i)*log(j)*0.53);
         }
     }
 }
@@ -434,6 +444,8 @@ void unmakemove(int notation) {
 }
 int generatemoves(int color, bool capturesonly, int depth) {
     movecount = 0;
+    mobilitym[color] = 0;
+    mobilitye[color] = 0;
     int kingsquare = popcount((Bitboards[color] & Bitboards[7])-1);
     int pinrank = kingsquare&56;
     int pinfile = kingsquare&7;
@@ -460,24 +472,28 @@ int generatemoves(int color, bool capturesonly, int depth) {
     U64 ourmask = 0ULL;
     for (int i = 0; i < pawncount; i++) {
         int pawnsquare = popcount((opponentpawns & -opponentpawns)-1);
-        opponentattacks |= PawnAttacks[opposite][pawnsquare];
+        opponentattacks |= PawnAttacks[opposite][pawnsquare];\
         opponentpawns^=(1ULL << pawnsquare);
     }
+    U64 opponentpawnattacks = opponentattacks;
     for (int i = 0; i < alfilcount; i++) {
         int alfilsquare = popcount((opponentalfils & -opponentalfils)-1);
         opponentattacks |= AlfilAttacks[alfilsquare];
         opponentalfils^=(1ULL << alfilsquare);
     }
+    U64 opponentalfilattacks = opponentattacks;
     for (int i = 0; i < ferzcount; i++) {
         int ferzsquare = popcount((opponentferzes & -opponentferzes)-1);
         opponentattacks |= FerzAttacks[ferzsquare];
         opponentferzes^=(1ULL << ferzsquare);
     }
+    U64 opponentferzattacks = opponentattacks;
     for (int i = 0; i < knightcount; i++) {
         int knightsquare = popcount((opponentknights & -opponentknights)-1);
         opponentattacks |= KnightAttacks[knightsquare];
         opponentknights^=(1ULL << knightsquare);
     }
+    U64 opponentknightattacks = opponentattacks;
     for (int i = 0; i < rookcount; i++) {
         int rooksquare = popcount((opponentrooks & -opponentrooks)-1);
         U64 r = GetRankAttacks(occupied, rooksquare);
@@ -500,6 +516,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
     int opponentking = popcount((Bitboards[opposite]&Bitboards[7])-1);
     opponentattacks |= KingAttacks[opponentking];
     ourcaptures = KingAttacks[kingsquare]&((~opponentattacks)&Bitboards[opposite]);
+    mobilitye[color] += kingmobe[popcount(KingAttacks[kingsquare]&(~opponentattacks))];
     int capturenumber = popcount(ourcaptures);
     int movenumber;
     for (int i = 0; i < capturenumber; i++) {
@@ -626,6 +643,8 @@ int generatemoves(int color, bool capturesonly, int depth) {
             continue;
         }
         ourmask = AlfilAttacks[alfilsquare];
+        mobilitym[color] += alfilmobm[popcount(ourmask&(~opponentpawnattacks)&(~Bitboards[color]))];
+        mobilitye[color] += alfilmobe[popcount(ourmask&(~opponentpawnattacks)&(~Bitboards[color]))];
         ourmask &= checkmask;
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
@@ -670,6 +689,8 @@ int generatemoves(int color, bool capturesonly, int depth) {
             continue;
         }
         ourmask = FerzAttacks[ferzsquare];
+        mobilitym[color] += ferzmobm[popcount(ourmask&(~opponentalfilattacks)&(~Bitboards[color]))];
+        mobilitye[color] += ferzmobe[popcount(ourmask&(~opponentalfilattacks)&(~Bitboards[color]))];
         ourmask &= checkmask;
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
@@ -714,6 +735,8 @@ int generatemoves(int color, bool capturesonly, int depth) {
             continue;
         }
         ourmask = KnightAttacks[knightsquare];
+        mobilitym[color] += knightmobm[popcount(ourmask&(~opponentferzattacks)&(~Bitboards[color]))];
+        mobilitye[color] += knightmobe[popcount(ourmask&(~opponentferzattacks)&(~Bitboards[color]))];
         ourmask &= checkmask;
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
@@ -764,6 +787,8 @@ int generatemoves(int color, bool capturesonly, int depth) {
                 pinmask = FileAttacks(preoccupied, rooksquare);
             }
         }
+        mobilitym[color] += rookmobm[popcount(ourmask&(~opponentknightattacks)&(~Bitboards[color]))];
+        mobilitye[color] += rookmobe[popcount(ourmask&(~opponentknightattacks)&(~Bitboards[color]))];
         ourmask &= (pinmask&checkmask);
         ourcaptures = ourmask&Bitboards[opposite];
         int capturenumber = popcount(ourcaptures);
@@ -1076,11 +1101,10 @@ string getFEN() {
 int evaluate(int color) {
     int midphase = min(48, gamephase[0]+gamephase[1]);
     int endphase = 48-midphase;
-    int mideval = evalm[color]-evalm[color^1];
-    int endeval = evale[color]-evale[color^1];
+    int mideval = evalm[color]+mobilitym[color]-evalm[color^1]-mobilitym[color^1];
+    int endeval = evale[color]+mobilitye[color]-evale[color^1]-mobilitye[color^1];
     int progress = 200-(position >> 1);
-    int pawnblock = popcount(shift_n(Bitboards[2]&Bitboards[0])&Bitboards[1])+popcount(shift_s(Bitboards[2]&Bitboards[1])&Bitboards[0]);
-    int base = (mideval*midphase+(block[pawnblock]*endeval*endphase)/24)/48+10;
+    int base = (mideval*midphase+endeval*endphase)/48+10;
     return (base*progress)/200;
 }
 int quiesce(int alpha, int beta, int color, int depth) {
