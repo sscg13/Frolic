@@ -293,7 +293,7 @@ void initializeboard() {
 void initializelmr() {
     for (int i = 0; i < maxdepth; i++) {
         for (int j = 0; j < 256; j++) {
-            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(0.67+log(i)*log(j)*0.53);
+            lmr_reductions[i][j] = (i == 0 || j == 0) ? 0 : floor(0.59+log(i)*log(j)*0.46);
         }
     }
 }
@@ -1130,7 +1130,7 @@ int quiesce(int alpha, int beta, int color, int depth) {
         }
         movcount = generatemoves(color, 1, maxdepth+depth);
     }
-    if (depth == 0) {
+    if (depth < 1) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
             int temp1 = 0;
@@ -1200,15 +1200,15 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
         else {
-            int margin = 40+60*(depth-ttdepth);
-            if ((nodetype&1) && (score-margin >= beta) && (abs(beta) < 27000)) {
+            int margin = 80*(depth-ttdepth);
+            if (((nodetype&1) && (score-margin >= beta)) && (abs(beta) < 27000 && !incheck)) {
                 return score-margin;
             }
         }
     }
-    int margin = 50+70*depth;
+    int margin = 80*depth;
     if (depth < initialdepth && score == -30000) {
-        if (evaluate(color)-margin >= beta && (abs(beta) < 400)) {
+        if (evaluate(color)-margin >= beta && (abs(beta) < 27000 && !incheck)) {
             return evaluate(color)-margin;
         }
     }
@@ -1216,7 +1216,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (movcount == 0) {
         return -1*(depth+28000-initialdepth);
     }
-    if ((!incheck && gamephase[color] > 0) && (depth > 1 && depth < initialdepth) && nmp) {
+    if ((!incheck && gamephase[color] > 0) && (depth > 1 && nmp)) {
         makenullmove();
         score = -alphabeta(max(0, depth-2-(depth+1)/3), initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
@@ -1247,16 +1247,16 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((movescore[depth][i] < 10000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
-        if ((r > 0) && (beta-alpha > 1)) {
+        int r = ((movescore[depth][i] < 3000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
+        if ((r > 0) && (beta-alpha > 1) && !incheck) {
             r--;
         }
         if (!stopsearch) {
             makemove(moves[depth][i], true);
             if (nullwindow) {
-                score = -alphabeta(depth-1, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
+                score = -alphabeta(depth-1-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
                 if (score > alpha && score < beta) {
-                    score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+                    score = -alphabeta(depth-1-r, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
                 }
             }
             else {
@@ -1320,7 +1320,7 @@ void iterative(int nodelimit, int timelimit, int color) {
         int beta = score+delta;
         bool fail = true;
         while (fail) {
-            int score1 = alphabeta(depth, depth, alpha, beta, color, true, nodelimit, timelimit);
+            int score1 = alphabeta(depth, depth, alpha, beta, color, false, nodelimit, timelimit);
             if (score1 >= beta) {
                 beta += delta;
                 delta += delta;
@@ -1395,6 +1395,9 @@ void iterative(int nodelimit, int timelimit, int color) {
                 cout << "\n";
             }
             depth++;
+            if (depth == maxdepth) {
+                stopsearch = true;
+            }
             bestmove1 = bestmove;
         }
         else {
