@@ -1182,6 +1182,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     int ttage = max(gamelength-TT[index].age, 0);
     bool update = (depth > (ttdepth-ttage/3));
     bool incheck = (checkers(color) != 0ULL);
+    bool isPV = (beta-alpha > 1);
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
@@ -1200,16 +1201,17 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
         else {
-            int margin = 80*(depth-ttdepth);
+            int margin = 75*(depth-ttdepth);
             if (((nodetype&1) && (score-margin >= beta)) && (abs(beta) < 27000 && !incheck)) {
                 return score-margin;
             }
         }
     }
-    int margin = 80*depth;
+    int staticeval = evaluate(color);
+    int margin = 75*depth;
     if (depth < initialdepth && score == -30000) {
-        if (evaluate(color)-margin >= beta && (abs(beta) < 27000 && !incheck)) {
-            return evaluate(color)-margin;
+        if (staticeval-margin >= beta && (abs(beta) < 27000 && !incheck)) {
+            return staticeval-margin;
         }
     }
     movcount = generatemoves(color, 0, depth);
@@ -1224,6 +1226,12 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             return beta;
         }
     }
+    /*if (depth < 2 && (staticeval + 150*depth < alpha)) {
+        int qsearchscore = quiesce(alpha, beta, color, 0);
+        if (qsearchscore < alpha) {
+            return alpha;
+        }
+    }*/
     if (depth > 1) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
@@ -1248,7 +1256,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
         int r = ((movescore[depth][i] < 3000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
-        if ((r > 0) && (beta-alpha > 1) && !incheck) {
+        if ((r > 0) && isPV && !incheck) {
             r--;
         }
         if (!stopsearch) {
@@ -1256,7 +1264,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             if (nullwindow) {
                 score = -alphabeta(depth-1-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
                 if (score > alpha && score < beta) {
-                    score = -alphabeta(depth-1-r, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+                    score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
                 }
             }
             else {
