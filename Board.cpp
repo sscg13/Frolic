@@ -1510,7 +1510,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             if (nullwindow) {
                 score = -alphabeta(depth-1-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
                 if (score > alpha && score < beta) {
-                    score = -alphabeta(depth-1-r, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
+                    score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
                 }
             }
             else {
