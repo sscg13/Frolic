@@ -1469,7 +1469,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             return 0;
         }
     }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 2 && depth < initialdepth) && nmp) {
+    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 2 && nmp)) {
         makenullmove();
         score = -alphabeta(depth-1-(depth+1)/3, initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
@@ -1553,7 +1553,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    if ((update && !stopsearch) && ((bestmove1 >= 0) && (abs(bestscore) < 29000))) {
+    if (update && !stopsearch) {
         updatett(index, depth, bestscore, 2+allnode, moves[depth][bestmove1]);
     }
     return bestscore;
@@ -1574,7 +1574,7 @@ void iterative(int nodelimit, int timelimit, int color) {
         int beta = score+delta;
         bool fail = true;
         while (fail) {
-            int score1 = alphabeta(depth, depth, alpha, beta, color, true, nodelimit, timelimit);
+            int score1 = alphabeta(depth, depth, alpha, beta, color, false, nodelimit, timelimit);
             if (score1 >= beta) {
                 beta += delta;
                 delta += delta;
