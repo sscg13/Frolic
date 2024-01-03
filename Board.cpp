@@ -1671,7 +1671,7 @@ void uci() {
             }
             winc = sum;
             reader = ucicommand.length()-1;
-            while (ucicommand[reader] != ' ') {
+            while (ucicommand[reader] == ' ') {
                 reader--;
             }
             sum = 0;
