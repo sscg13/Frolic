@@ -1559,7 +1559,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     return bestscore;
 }
-void iterative(int nodelimit, int timelimit, int color) {
+void iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
     nodecount = 0;
     stopsearch = false;
     start = chrono::steady_clock::now();
@@ -1575,7 +1575,7 @@ void iterative(int nodelimit, int timelimit, int color) {
         int beta = score+delta;
         bool fail = true;
         while (fail) {
-            int score1 = alphabeta(depth, depth, alpha, beta, color, false, nodelimit, timelimit);
+            int score1 = alphabeta(depth, depth, alpha, beta, color, false, nodelimit, hardtimelimit);
             if (score1 >= beta) {
                 beta += delta;
                 delta += delta;
@@ -1591,7 +1591,7 @@ void iterative(int nodelimit, int timelimit, int color) {
         }
         auto now = chrono::steady_clock::now();
         auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
-        if (nodecount < nodelimit && timetaken.count() < timelimit && depth < maxdepth && bestmove >= 0) {
+        if (nodecount < nodelimit && timetaken.count() < hardtimelimit && depth < maxdepth && bestmove >= 0) {
             int last = depth;
             int pvcolor = color;
             bool stop = false;
@@ -1653,6 +1653,9 @@ void iterative(int nodelimit, int timelimit, int color) {
             bestmove1 = bestmove;
         }
         else {
+            stopsearch = true;
+        }
+        if (timetaken.count() > softtimelimit) {
             stopsearch = true;
         }
     }
@@ -1825,11 +1828,11 @@ void uci() {
         }
         int color = position&1;
         if (color == 0) {
-            iterative(1000000000, wtime/35+winc/3, 0);
+            iterative(1000000000, wtime/40+winc/3, wtime/10+winc, 0);
 
         }
         else {
-            iterative(1000000000, btime/35+binc/3, 1);
+            iterative(1000000000, btime/40+binc/3, btime/10+binc, 1);
         }
     }
     if (ucicommand.substr(0, 11) == "go movetime") {
@@ -1842,7 +1845,7 @@ void uci() {
             reader--;
         }
         int color = position&1;
-        iterative(1000000000, sum, color);
+        iterative(1000000000, sum, sum, color);
     }
     if (ucicommand.substr(0, 8) == "go nodes") {
         int sum = 0;
@@ -1855,15 +1858,15 @@ void uci() {
         }
         int color = position&1;
         if (nodetime == 0) {
-            iterative(sum, 120000, color);
+            iterative(sum, 120000, 120000, color);
         }
         else {
-            iterative(nodetime, 120000, color);
+            iterative(nodetime, 120000, 120000, color);
         }
     }
     if (ucicommand.substr(0, 11) == "go infinite") {
         int color = position&1;
-        iterative(1000000000, 120000, color);
+        iterative(1000000000, 120000, 120000, color);
     }
     if (ucicommand.substr(0, 8) == "go perft") {
         start = chrono::steady_clock::now();
@@ -1920,7 +1923,7 @@ void xboard() {
             add*=10;
             reader--;
         }
-        movetime = sum/29;
+        movetime = sum/12;
     }
     if (xcommand.substr(0, 7) == "level 0") {
         int reader = 8;
@@ -1963,7 +1966,7 @@ void xboard() {
         if (incenti) {
             sum2/=100;
         }
-        movetime = sum1/35+sum2/3;
+        movetime = sum1/10+sum2;
     }
     if (xcommand.substr(0, 4) == "ping") {
         int sum = 0;
@@ -1989,13 +1992,13 @@ void xboard() {
             makemove(moves[0][played], false);
             if (gosent) {
                 int color = position&1;
-                iterative(1000000000, movetime, color);
+                iterative(1000000000, movetime/4, movetime, color);
             }
         }
     }
     if (xcommand == "go") {
         int color = position&1;
-        iterative(1000000000, movetime, color);
+        iterative(1000000000, movetime/4, movetime, color);
         gosent = true;
     }
 }
