@@ -1447,7 +1447,7 @@ void autoplay(int nodes) {
     bool finished = false;
     while (!finished) {
         int color = position&1;
-        iterative(nodes, 60000, 120000, color);
+        iterative(nodes, 120000, 120000, color);
         makemove(bestmove, 0);
         if (bestmove > 0) {
             game = game + algebraic(bestmove);
@@ -1702,7 +1702,7 @@ void uci() {
             reader--;
         }
         int color = position&1;
-        iterative(1000000000, sum/3, sum, color);
+        iterative(1000000000, sum, sum, color);
     }
     if (ucicommand.substr(0, 8) == "go nodes") {
         int sum = 0;
@@ -1714,11 +1714,11 @@ void uci() {
             reader--;
         }
         int color = position&1;
-        iterative(sum, 60000, 120000, color);
+        iterative(sum, 120000, 120000, color);
     }
     if (ucicommand.substr(0, 11) == "go infinite") {
         int color = position&1;
-        iterative(1000000000, 60000, 120000, color);
+        iterative(1000000000, 120000, 120000, color);
     }
     if (ucicommand.substr(0, 8) == "go perft") {
         start = chrono::steady_clock::now();
@@ -1841,7 +1841,7 @@ void xboard() {
             add*=10;
             reader--;
         }
-        movetime = sum/29;
+        movetime = sum/16;
     }
     if (xcommand.substr(0, 7) == "level 0") {
         int reader = 8;
@@ -1884,7 +1884,7 @@ void xboard() {
         if (incenti) {
             sum2/=100;
         }
-        movetime = sum1/35+sum2/3;
+        movetime = sum1/10+sum2;
     }
     if (xcommand.substr(0, 4) == "ping") {
         int sum = 0;
