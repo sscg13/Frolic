@@ -1501,9 +1501,10 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
         int r = ((movescore[depth][i] < 2500) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
-        if ((r > 0) && (checkers(color) != 0ULL || beta-alpha > 1)) {
+        if (checkers(color) != 0ULL || beta-alpha > 1) {
             r--;
         }
+        r = max(0, r);
         //bool prune = ((beta-alpha < 2) && (depth < 5) && (i > 6+4*depth) && movescore[depth][i] < 1000);
         if (!stopsearch) {
             makemove(moves[depth][i], true);
@@ -1809,11 +1810,8 @@ void uci() {
                 reader--;
             }
             winc = sum;
-            while (ucicommand[reader] != 'b') {
-                reader++;
-            }
-            reader--;
-            while (ucicommand[reader] != ' ') {
+            reader = ucicommand.length()-1;
+            while (ucicommand[reader] == ' ') {
                 reader--;
             }
             sum = 0;
