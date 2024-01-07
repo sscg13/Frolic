@@ -1419,9 +1419,6 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     int score = -30000;
     int bestscore = -30000;
-    if (Bitboards[color]&Bitboards[7]==0ULL) {
-        return -29000;
-    }
     int allnode = 0;
     int movcount;
     int index = zobristhash%TTsize;
