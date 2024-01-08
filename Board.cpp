@@ -1414,7 +1414,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     if (repetitions() > 1) {
         return 0;
     }
-    if (depth == 0) {
+    if (depth == 0 || ply >= maxdepth) {
         return quiesce(alpha, beta, color, 0);
     }
     int score = -30000;
@@ -1482,10 +1482,10 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
             if (moves[ply][i] == ttmove) {
                 movescore[ply][i] = (1 << 20);
             }
-            if (moves[ply][i] == killers[depth][0]) {
+            if (moves[ply][i] == killers[ply][0]) {
                 movescore[ply][i]+=20000;
             }
-            if (moves[ply][i] == killers[depth][1]) {
+            if (moves[ply][i] == killers[ply][1]) {
                 movescore[ply][i]+=10000;
             }
             while (j > 0 && movescore[ply][j] > movescore[ply][j-1]) {
