@@ -5,6 +5,7 @@
 #include <string>
 #include <chrono>
 #include <fstream>
+#include <algorithm>
 using U64 = uint64_t;
 using namespace std;
 
@@ -80,32 +81,20 @@ bool suppressoutput = false;
 //26 bits total for now?
 int movecount;
 auto start = chrono::steady_clock::now();
-int materialm[6] = {82, 337, 365, 477, 735, 20000};
-int materiale[6] = {94, 371, 347, 652, 1036, 20000};
-int pstm[6][64] = {{0,0,0,0,0,0,0,0,-35,-1,-20,-23,-15,24,38,-22,-26,-4,-4,-10,3,3,33,-12,-27,-2,-5,12,17,6,10,-25,
--14,13,6,21,23,12,17,-23,-6,7,26,31,65,56,25,-20,98,134,61,95,68,126,34,-11,0,0,0,0,0,0,0,0},
-{-105,-21,-58,-33,-17,-28,-19,-23,-29,-53,-12,-3,-1,18,-14,-19,-23,-9,12,10,19,17,25,-16,-13,4,16,13,28,19,21,-8,
--9,17,19,53,37,69,18,22,-47,60,37,65,84,129,73,44,-73,-41,72,36,23,62,7,-17,-167,-89,-34,-49,61,-97,-15,-107},
-{-33,-3,-14,-21,-13,-12,-39,-21,4,15,16,0,7,21,33,1,0,15,15,15,14,27,18,10,-6,13,13,26,34,12,10,4,
--4,5,19,50,37,37,7,-2,-16,37,43,40,35,50,37,-2,-26,16,-18,-13,30,59,18,-47,-29,4,-82,-37,-25,-42,7,-8},
-{-19,-13,1,17,16,7,-37,-26,-44,-16,-20,-9,-1,11,-6,-71,-45,-25,-16,-17,3,0,-5,-33,-36,-26,-12,-1,9,-7,6,-23,
--24,-11,7,26,24,35,-8,-20,-5,19,26,36,17,45,61,16,27,32,58,62,80,67,26,44,32,42,32,51,63,9,31,43},
-{-1,-18,-9,10,-15,-25,-31,-50,-35,-8,11,2,8,15,-3,1,-14,2,-11,-2,-5,2,14,5,-9,-26,-9,-10,-2,-4,3,-3,
--27,-27,-16,-16,-1,17,-2,1,-13,-17,7,8,29,56,47,57,-24,-39,-5,1,-16,57,28,54,-28,0,29,12,59,44,43,45},
-{-15,36,12,-54,8,-28,34,14,1,7,-8,-64,-43,-16,9,8,-14,-14,-22,-46,-44,-30,-15,-27,-49,-1,-27,-39,-46,-44,-33,-51,
--17,-20,-12,-27,-30,-25,-14,-36,-9,24,2,-16,-20,6,22,-22,29,-1,-20,-7,-8,-4,-38,-29,-65,23,16,-15,-56,-34,2,13}};
-int pste[6][64] = {{0,0,0,0,0,0,0,0,13,8,8,10,13,0,2,-7,4,7,-6,1,0,-5,-1,-8,13,9,-3,-7,-7,-8,3,-1,
-32,24,13,5,-2,4,17,17,94,100,85,67,56,53,82,84,178,173,158,134,147,132,165,187,0,0,0,0,0,0,0,0},
-{-29,-51,-23,-15,-22,-18,-50,-64,-42,-20,-10,-5,-2,-20,-23,-44,-23,-3,-1,15,10,-3,-20,-22,-18,-6,16,25,16,17,4,-18,
--17,3,22,22,22,11,8,-18,-24,-20,10,9,-1,-9,-19,-41,-25,-8,-25,-2,-9,-25,-24,-52,-58,-38,-13,-28,-31,-27,-63,-99},
-{-23,-9,-23,-5,-9,-16,-5,-17,-14,-18,-7,-1,4,-9,-15,-27,-12,-3,8,10,13,3,-7,-15,-6,3,13,19,7,10,-3,-9,
--3,9,12,9,14,10,3,2,2,-8,0,-1,-2,6,0,4,-8,-4,7,-12,-3,-13,-4,-14,-14,-21,-11,-8,-7,-9,-17,-24},
-{-9,2,3,-1,-5,-13,4,-20,-6,-6,0,2,-9,-9,-11,-3,-4,0,-5,-1,-7,-12,-8,-16,3,5,8,4,-5,-6,-8,-11,
-4,3,13,1,2,1,-1,2,7,7,7,5,4,-3,-5,-3,11,13,13,11,-3,3,8,3,13,10,18,15,12,12,8,5},
-{-33,-28,-22,-43,-5,-32,-20,-41,-22,-23,-30,-16,-16,-23,-36,-32,-16,-27,15,6,9,17,10,5,-18,28,19,47,31,34,39,23,
-3,22,24,45,57,40,57,36,-20,6,9,49,47,35,19,9,-17,20,32,41,58,25,30,0,-9,22,22,27,27,19,10,20},
-{-53,-34,-21,-11,-28,-14,-24,-43,-27,-11,4,13,14,4,-5,-17,-19,-3,11,21,23,16,7,-9,-18,-4,21,24,27,23,9,-11,
--8,22,24,27,26,33,26,3,10,17,23,15,20,45,44,13,-12,17,14,17,17,38,23,11,-74,-35,-18,-18,-11,15,4,-17}};
+int materialm[6] = {-34, 135, 223, 417, 829, 20000};
+int materiale[6] = {145, 361, 262, 911, 1374, 20000};
+int pstm[6][64] = {{0,0,0,0,0,0,0,0,-23,2,-10,-55,-58,78,93,2,12,30,7,11,20,9,103,-33,-14,-28,38,33,51,32,-5,-64,21,33,44,69,51,47,33,24,51,65,22,88,48,96,89,-64,42,80,126,65,135,74,110,46,0,0,0,0,0,0,0,0},
+{-162,-38,-62,-88,-68,-38,-44,-86,29,-101,-60,-42,-13,56,35,-34,19,-55,36,35,-1,0,68,-28,45,-53,50,-16,-0,33,-33,1,51,69,-26,13,-4,119,7,79,-40,121,-13,12,82,76,78,100,-12,20,36,-16,-15,72,67,45,-221,-29,-72,-2,120,-24,60,-160},
+{-68,50,-21,-72,-36,-36,-91,-64,-11,-20,63,35,43,20,57,-49,7,67,59,31,30,-2,-34,-35,55,65,59,-14,22,11,-6,61,52,50,8,48,-7,39,8,-47,-36,88,-8,-13,-12,-3,-8,-44,13,-27,-74,-60,-20,4,-29,11,-88,-53,-122,-97,-14,-82,-49,-5},
+{-26,10,-49,50,59,19,-61,-61,-107,0,41,1,35,45,-31,-115,-76,33,-20,-70,45,52,-57,-76,-79,-88,25,-57,31,45,6,-58,10,-11,-9,-30,-33,-20,-63,41,-45,42,-29,85,-36,-14,1,42,-7,-4,111,107,117,116,-33,111,-39,89,79,-12,42,-67,46,99},
+{40,5,-72,-35,24,22,-74,-24,-59,33,44,21,27,57,-53,60,-65,45,35,38,-7,50,74,57,-47,-83,28,-60,62,3,-9,42,24,-75,-75,-13,5,44,35,58,-62,-75,58,-30,84,6,89,115,-82,-96,68,54,42,118,-34,111,-94,-56,-33,-51,-6,98,67,63},
+{-68,79,45,-105,-10,-64,68,58,48,60,35,-119,-101,-65,-5,-20,-62,-44,-64,-109,-109,-84,-63,-75,-105,-60,-83,-98,-109,-100,-90,-109,53,-87,-59,-85,-81,-81,-70,-89,-68,63,-53,43,-80,-51,-41,-90,-37,-64,35,-55,-59,-68,-107,-87,-113,65,-42,-74,5,-27,-62,-49}};
+int pste[6][64] = {{0,0,0,0,0,0,0,0,45,21,52,-19,-32,-5,-2,32,54,57,7,-44,-35,-42,7,48,35,51,24,7,-7,28,5,-31,36,48,20,-11,-34,5,37,42,145,139,45,100,32,58,31,105,233,227,208,194,204,145,210,243,0,0,0,0,0,0,0,0},
+{-20,-88,-47,-1,-71,-27,-69,3,15,-50,58,-38,26,29,27,-28,25,2,38,-5,75,-20,22,16,37,35,-3,52,5,47,-42,34,38,60,69,50,16,43,51,41,30,-18,-28,-31,50,-55,29,-34,-4,46,46,-43,-25,32,34,2,-114,19,41,9,27,31,-109,-122},
+{-54,53,-47,-48,-57,-48,-53,40,44,2,3,39,46,45,38,-77,49,20,63,45,51,52,18,20,50,11,-4,84,-3,8,58,45,49,59,-11,3,-33,34,30,-4,-30,45,-31,-51,3,-40,67,-3,-21,-43,-46,-33,-51,-63,-2,-45,-24,-73,-54,33,50,-51,-71,37},
+{-13,4,38,36,36,2,-43,-58,1,-63,-42,-53,9,-9,28,10,48,54,-51,-52,38,40,-63,-43,4,46,-8,0,38,48,37,-18,53,21,60,-34,44,53,51,19,66,53,37,55,34,-3,38,-6,65,67,66,64,50,55,58,44,60,64,68,36,54,59,55,61},
+{13,-37,-37,-81,40,15,22,8,33,21,0,12,16,22,-99,24,-33,22,64,48,49,65,69,58,-43,-30,72,113,69,-16,67,73,56,36,-35,65,110,73,96,93,-4,-53,54,8,99,-18,28,66,-76,-39,92,-9,110,85,-36,55,-2,61,-42,-36,-46,72,61,36},
+{-32,13,-64,-61,-46,-52,11,-1,-22,-51,24,-20,-21,-9,-13,-63,-74,-50,-14,28,28,-31,-23,-60,-52,-11,-21,-15,31,-14,-44,-65,-58,35,23,-24,-20,-15,-20,-50,-50,62,-27,-13,1,6,31,27,-75,37,55,-7,-30,39,59,-33,-138,20,-75,-77,47,-35,-10,22}};
 int castlechange[64] = {13, 15, 15, 15, 12, 15, 15, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,15, 15, 15, 15, 15, 15, 15, 15,7, 15, 15, 15,  3, 15, 15, 11};
 int historytable[2][6][64];
@@ -113,6 +102,7 @@ int startpiece[16] = {3, 1, 2, 4, 5, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0};
 int phase[6] = {0, 1, 1, 2, 4, 0};
 int gamephase[2] = {0, 0};
 ofstream gameoutput;
+string textoutput;
 struct TTentry {
     U64 key;
     int score;
@@ -352,6 +342,27 @@ int repetitions() {
     }
     return repeats;
 }
+void makenullmove() {
+    gamelength++;
+    int halfmove = (position >> 1)&127;
+    if (position & 0x00003F00) {
+        int file = (position >> 8) & 7;
+        zobristhash^=epfilehash[file];
+        position^=((position >> 8)&63);
+    }
+    zobristhash^=colorhash;
+    position^=(halfmove << 1);
+    halfmove++;
+    position^=(halfmove << 1);
+    position^=1;
+    zobrist[gamelength] = zobristhash;
+    history[gamelength] = position;
+}
+void unmakenullmove() {
+    gamelength--;
+    position = history[gamelength];
+    zobristhash = zobrist[gamelength];
+}
 void makemove(int notation, bool reversible) {
     //6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit capture, 3 bits piece captured, 1 bit promotion,
     //2 bits promoted piece, 1 bit castling, 1 bit double pawn push, 1 bit en passant,
@@ -530,7 +541,7 @@ void unmakemove(int notation) {
         evale[color^1]+=(materiale[0]+pste[0][(56*(color^1))^shadow]);
     }
 }
-int generatemoves(int color, int depth) {
+int generatemoves(int color, bool capturesonly, int depth) {
     movecount = 0;
     int kingsquare = popcount((Bitboards[color] & Bitboards[7])-1);
     int pinrank = kingsquare&56;
@@ -576,17 +587,19 @@ int generatemoves(int color, int depth) {
         movecount++;
         ourcaptures^=(1ULL << capturesquare);
     }
-    ourmoves = KingAttacks[kingsquare]&(~preoccupied);
-    movenumber = popcount(ourmoves);
-    for (int i = 0; i < movenumber; i++) {
-        int movesquare = popcount((ourmoves & -ourmoves)-1);
-        int notation = kingsquare | (movesquare << 6);
-        notation |= (color << 12);
-        notation |= (7 << 13);
-        moves[depth][movecount] = notation;
-        movescore[depth][movecount] = historytable[color][5][movesquare];
-        movecount++;
-        ourmoves^=(1ULL << movesquare);
+    if (!capturesonly) {
+        ourmoves = KingAttacks[kingsquare]&(~preoccupied);
+        movenumber = popcount(ourmoves);
+        for (int i = 0; i < movenumber; i++) {
+            int movesquare = popcount((ourmoves & -ourmoves)-1);
+            int notation = kingsquare | (movesquare << 6);
+            notation |= (color << 12);
+            notation |= (7 << 13);
+            moves[depth][movecount] = notation;
+            movescore[depth][movecount] = historytable[color][5][movesquare];
+            movecount++;
+            ourmoves^=(1ULL << movesquare);
+        }
     }
     U64 ourpawns = Bitboards[color]&Bitboards[2];
     U64 ourknights = Bitboards[color]&Bitboards[3];
@@ -642,29 +655,31 @@ int generatemoves(int color, int depth) {
             }
             ourcaptures^=(1ULL << capturesquare);
         }
-        ourmoves = PawnMoves(preoccupied, pawnsquare, color);
-        int movenumber = popcount(ourmoves);
-        for (int j = 0; j < movenumber; j++) {
-            int movesquare = popcount((ourmoves & -ourmoves)-1);
-            int notation = pawnsquare | (movesquare << 6);
-            notation |= (color << 12);
-            notation |= (2 << 13);
-            if ((movesquare-pawnsquare==16 && color==0)||(pawnsquare-movesquare==16 && color==1)) {
-                notation |= (1 << 24);
-            }
-            if (((color==0)&&(movesquare&56)==56)||((color==1)&&(movesquare&56)==0)) {
-                for (int k = 0; k < 4; k++) {
-                    moves[depth][movecount]=notation|((1 << 20)|(k << 21));
-                    movescore[depth][movecount] = 9000+historytable[color][0][movesquare];
+        if (!capturesonly) {
+            ourmoves = PawnMoves(preoccupied, pawnsquare, color);
+            int movenumber = popcount(ourmoves);
+            for (int j = 0; j < movenumber; j++) {
+                int movesquare = popcount((ourmoves & -ourmoves)-1);
+                int notation = pawnsquare | (movesquare << 6);
+                notation |= (color << 12);
+                notation |= (2 << 13);
+                if ((movesquare-pawnsquare==16 && color==0)||(pawnsquare-movesquare==16 && color==1)) {
+                    notation |= (1 << 24);
+                }
+                if (((color==0)&&(movesquare&56)==56)||((color==1)&&(movesquare&56)==0)) {
+                    for (int k = 0; k < 4; k++) {
+                        moves[depth][movecount]=notation|((1 << 20)|(k << 21));
+                        movescore[depth][movecount] = 9000+historytable[color][0][movesquare];
+                        movecount++;
+                    }
+                }
+                else {
+                    moves[depth][movecount]=notation;
+                    movescore[depth][movecount] = historytable[color][0][movesquare];
                     movecount++;
                 }
+                ourmoves^=(1ULL << movesquare);
             }
-            else {
-                moves[depth][movecount]=notation;
-                movescore[depth][movecount] = historytable[color][0][movesquare];
-                movecount++;
-            }
-            ourmoves^=(1ULL << movesquare);
         }
         ourpawns^=(1ULL << pawnsquare);
     }
@@ -691,17 +706,19 @@ int generatemoves(int color, int depth) {
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
-        ourmoves = ourmask&(~preoccupied);
-        int movenumber = popcount(ourmoves);
-        for (int j = 0; j < movenumber; j++) {
-            int movesquare = popcount((ourmoves & -ourmoves)-1);
-            int notation = knightsquare | (movesquare << 6);
-            notation |= (color << 12);
-            notation |= (3 << 13);
-            moves[depth][movecount]=notation;
-            movescore[depth][movecount] = historytable[color][1][movesquare];
-            movecount++;
-            ourmoves^=(1ULL << movesquare);
+        if (!capturesonly) {
+            ourmoves = ourmask&(~preoccupied);
+            int movenumber = popcount(ourmoves);
+            for (int j = 0; j < movenumber; j++) {
+                int movesquare = popcount((ourmoves & -ourmoves)-1);
+                int notation = knightsquare | (movesquare << 6);
+                notation |= (color << 12);
+                notation |= (3 << 13);
+                moves[depth][movecount]=notation;
+                movescore[depth][movecount] = historytable[color][1][movesquare];
+                movecount++;
+                ourmoves^=(1ULL << movesquare);
+            }
         }
         ourknights^=(1ULL << knightsquare);
     }
@@ -728,17 +745,19 @@ int generatemoves(int color, int depth) {
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
-        ourmoves = ourmask&(~preoccupied);
-        int movenumber = popcount(ourmoves);
-        for (int j = 0; j < movenumber; j++) {
-            int movesquare = popcount((ourmoves & -ourmoves)-1);
-            int notation = bishopsquare | (movesquare << 6);
-            notation |= (color << 12);
-            notation |= (4 << 13);
-            moves[depth][movecount]=notation;
-            movescore[depth][movecount] = historytable[color][2][movesquare];
-            movecount++;
-            ourmoves^=(1ULL << movesquare);
+        if (!capturesonly) {
+            ourmoves = ourmask&(~preoccupied);
+            int movenumber = popcount(ourmoves);
+            for (int j = 0; j < movenumber; j++) {
+                int movesquare = popcount((ourmoves & -ourmoves)-1);
+                int notation = bishopsquare | (movesquare << 6);
+                notation |= (color << 12);
+                notation |= (4 << 13);
+                moves[depth][movecount]=notation;
+                movescore[depth][movecount] = historytable[color][2][movesquare];
+                movecount++;
+                ourmoves^=(1ULL << movesquare);
+            }
         }
         ourbishops^=(1ULL << bishopsquare);
     }
@@ -765,17 +784,19 @@ int generatemoves(int color, int depth) {
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
-        ourmoves = ourmask&(~preoccupied);
-        int movenumber = popcount(ourmoves);
-        for (int j = 0; j < movenumber; j++) {
-            int movesquare = popcount((ourmoves & -ourmoves)-1);
-            int notation = rooksquare | (movesquare << 6);
-            notation |= (color << 12);
-            notation |= (5 << 13);
-            moves[depth][movecount]=notation;
-            movescore[depth][movecount] = historytable[color][3][movesquare];
-            movecount++;
-            ourmoves^=(1ULL << movesquare);
+        if (!capturesonly) {
+            ourmoves = ourmask&(~preoccupied);
+            int movenumber = popcount(ourmoves);
+            for (int j = 0; j < movenumber; j++) {
+                int movesquare = popcount((ourmoves & -ourmoves)-1);
+                int notation = rooksquare | (movesquare << 6);
+                notation |= (color << 12);
+                notation |= (5 << 13);
+                moves[depth][movecount]=notation;
+                movescore[depth][movecount] = historytable[color][3][movesquare];
+                movecount++;
+                ourmoves^=(1ULL << movesquare);
+            }
         }
         ourrooks^=(1ULL << rooksquare);
     }
@@ -803,17 +824,19 @@ int generatemoves(int color, int depth) {
             movecount++;
             ourcaptures^=(1ULL << capturesquare);
         }
-        ourmoves = ourmask&(~preoccupied);
-        int movenumber = popcount(ourmoves);
-        for (int j = 0; j < movenumber; j++) {
-            int movesquare = popcount((ourmoves & -ourmoves)-1);
-            int notation = queensquare | (movesquare << 6);
-            notation |= (color << 12);
-            notation |= (6 << 13);
-            moves[depth][movecount]=notation;
-            movescore[depth][movecount] = historytable[color][4][movesquare];
-            movecount++;
-            ourmoves^=(1ULL << movesquare);
+        if (!capturesonly) {
+            ourmoves = ourmask&(~preoccupied);
+            int movenumber = popcount(ourmoves);
+            for (int j = 0; j < movenumber; j++) {
+                int movesquare = popcount((ourmoves & -ourmoves)-1);
+                int notation = queensquare | (movesquare << 6);
+                notation |= (color << 12);
+                notation |= (6 << 13);
+                moves[depth][movecount]=notation;
+                movescore[depth][movecount] = historytable[color][4][movesquare];
+                movecount++;
+                ourmoves^=(1ULL << movesquare);
+            }
         }
         ourqueens^=(1ULL << queensquare);
     }
@@ -1040,6 +1063,54 @@ void parseFEN(string FEN) {
     zobrist[0] = zobristhash;
     history[0] = position;
 }
+string getFEN() {
+    int order[64] = {56, 57, 58, 59, 60, 61, 62, 63, 48, 49, 50, 51, 52, 53, 54, 55, 40, 41, 42, 43, 44, 45, 46, 47,
+    32, 33, 34, 35, 36, 37, 38, 39, 24, 25, 26, 27, 28, 29, 30, 31, 16, 17, 18, 19, 20, 21, 22, 23,
+    8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7};
+    string FEN = "";
+    int empt = 0;
+    char convert[2][6] = {{'P', 'N', 'B', 'R', 'Q', 'K'}, {'p', 'n', 'b', 'r', 'q', 'k'}};
+    int color;
+    int piece;
+    for (int i = 0; i < 64; i++) {
+        color = -1;
+        for (int j = 0; j < 2; j++) {
+            if (Bitboards[j]&(1ULL << order[i])) {
+                color = j;
+            }
+        }
+        if (color >= 0) {
+            if (empt > 0) {
+                FEN = FEN + (char)(empt+48);
+                empt = 0;
+            }
+            for (int j = 0; j < 6; j++) {
+                if (Bitboards[j+2]&(1ULL << order[i])) {
+                    piece = j;
+                }
+            }
+            FEN = FEN + (convert[color][piece]);
+        }
+        else {
+            empt++;
+            if ((i&7) == 7) {
+                FEN = FEN + (char)(empt+48);
+                empt = 0;
+            }
+        }
+        if (((i&7) == 7) && (i < 63)) {
+            FEN = FEN + '/';
+        }
+    }
+    FEN = FEN + ' ';
+    if ((gamelength+1)&2) {
+        FEN = FEN + "b - - 0 1";
+    }
+    else {
+        FEN = FEN + "w - - 0 1";
+    }
+    return FEN;
+}
 int getkingsafety(int color) {
     int king = popcount((Bitboards[7]&Bitboards[color])-1);
     U64 occupied = (Bitboards[0]|Bitboards[1]);
@@ -1091,6 +1162,59 @@ int evaluate(int color) {
     int extra = bishops+tempo+kingsafety+random+rooks;
     return base+extra;
 }
+int quiesce(int alpha, int beta, int color, int depth) {
+    if ((Bitboards[7]&Bitboards[color]) == 0ULL) {
+        return -27000;
+    }
+    int score = evaluate(color);
+    int bestscore = -30000;
+    int movcount;
+    if (depth > 3) {
+        return score;
+    }
+    else {
+        bestscore = score;
+        if (alpha < score) {
+            alpha = score;
+        }
+        if (score >= beta) {
+            return score;
+        }
+    }
+    movcount = generatemoves(color, 1, maxdepth+depth);
+    if (depth < 2) {
+        for (int i = 0; i < movcount; i++) {
+            int j = i;
+            int temp1 = 0;
+            int temp2 = 0;
+            while (j > 0 && movescore[maxdepth+depth][j] > movescore[maxdepth+depth][j-1]) {
+                swap(moves[maxdepth+depth][j], moves[maxdepth+depth][j-1]);
+                swap(movescore[maxdepth+depth][j], movescore[maxdepth+depth][j-1]);
+                j--;
+            }
+        }
+    }
+    for (int i = 0; i < movcount; i++) {
+        makemove(moves[maxdepth+depth][i], 1);
+        if (gamelength&1) {
+            score = -quiesce(-beta, -alpha, color^1, depth+1);
+        }
+        else {
+            score = quiesce(alpha, beta, color, depth+1);
+        }
+        unmakemove(moves[maxdepth+depth][i]);
+        if (score >= beta) {
+            return score;
+        }
+        if (score > alpha) {
+            alpha = score;
+        }
+        if (score > bestscore) {
+            bestscore = score;
+        }
+    }
+    return bestscore;
+}
 int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool nmp, int nodelimit, int timelimit) {
     if (repetitions() > 1) {
         return 0;
@@ -1129,7 +1253,15 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    movcount = generatemoves(color, depth);
+    if (((gamelength&1) && gamephase[color] > 0) && (depth > 2 && nmp) && (evaluate(color) > beta)) {
+        makenullmove();
+        score = alphabeta(depth-3, initialdepth, beta-1, beta, color, false, nodelimit, timelimit);
+        unmakenullmove();
+        if (score >= beta) {
+            return beta;
+        }
+    }
+    movcount = generatemoves(color, 0, depth);
     if (depth > 1) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
@@ -1207,7 +1339,7 @@ void iterative(int nodelimit, int timelimit, int color) {
     dampenhistory();
     while (!stopsearch) {
         bestmove = -1;
-        score = alphabeta(depth, depth, -29000, 29000, color, 1, nodelimit, timelimit);
+        score = alphabeta(depth, depth, -29000, 29000, color, 0, nodelimit, timelimit);
         auto now = chrono::steady_clock::now();
         auto timetaken = chrono::duration_cast<chrono::milliseconds>(now-start);
         if (!stopsearch && depth < maxdepth) {
@@ -1243,17 +1375,14 @@ void autoplay(int nodes) {
     initializett();
     clearhistory();
     initializeboard();
-    int rand1 = rand()%20;
-    int rand2 = rand()%20;
-    generatemoves(0, 0);
     string game = "";
-    makemove(moves[0][rand1], 0);
-    game += algebraic(moves[0][rand1]);
-    game += " ";
-    generatemoves(1, 0);
-    makemove(moves[0][rand2], 0);
-    game += algebraic(moves[0][rand2]);
-    game += " ";
+    for (int i = 0; i < 4; i++) {
+        int num_moves = generatemoves(((i+1)&2)>>1, 0, 0);
+        int rand_move = rand()%num_moves;
+        makemove(moves[0][rand_move], 0);
+        game += algebraic(moves[0][rand_move]);
+        game += " ";
+    }
     while (popcount(Bitboards[7]) > 1 && repetitions() < 2 && popcount(Bitboards[0]|Bitboards[1]) > 3) {
         int color = position&1;
         iterative(nodes, 120000, color);
@@ -1278,6 +1407,42 @@ void autoplay(int nodes) {
     clearhistory();
     initializeboard();
 }
+void extractTexel(string inputfile) {
+    gameoutput.open(textoutput, ofstream::app);
+    ifstream datainput;
+    datainput.open(inputfile, ifstream::app);
+    while (datainput.good()) {
+        initializeboard();
+        string game;
+        getline(datainput, game);
+        string mov = "";
+        char result = game[game.length()-1];
+        for (int i = 0; i < game.length(); i++) {
+            if (game[i]==' ') {
+                int color = ((i+1)&2)>>1;
+                int len = generatemoves(color, 0, 0);
+                int played = -1;
+                for (int j = 0; j < len; j++) {
+                    if (algebraic(moves[0][j])==mov) {
+                        played = j;
+                    }
+                }
+                if (played >= 0) {
+                    if ((gamelength&1) == 0 && (gamelength > 1)) {
+                        gameoutput << result << " " << getFEN() << "\n";
+                    }
+                    makemove(moves[0][played], false);
+                }
+                mov = "";
+            }
+            else {
+                mov+=game[i];
+            }
+        }
+    }
+    datainput.close();
+    gameoutput.close();
+}
 void uci() {
     string ucicommand;
     getline(cin, ucicommand);
@@ -1299,7 +1464,7 @@ void uci() {
     if (ucicommand.substr(0, 8) == "makemove") {
         string mov = ucicommand.substr(9, 5);
         int color = position&1;
-        int len = generatemoves(color, 0);
+        int len = generatemoves(color, 0, 0);
         int played = -1;
         for (int i = 0; i < len; i++) {
             if (algebraic(moves[0][i]) == mov) {
@@ -1316,7 +1481,7 @@ void uci() {
         string mov = "";
         for (int i = 24; i <= ucicommand.length(); i++) {
             if ((ucicommand[i]==' ') || (i == ucicommand.length())) {
-                int len = generatemoves(color, 0);
+                int len = generatemoves(color, 0, 0);
                 int played = -1;
                 for (int j = 0; j < len; j++) {
                     if (algebraic(moves[0][j])==mov) {
@@ -1345,7 +1510,7 @@ void uci() {
         string mov = "";
         for (int i = reader+6; i <= ucicommand.length(); i++) {
             if ((ucicommand[i]==' ') || (i == ucicommand.length())) {
-                int len = generatemoves(color, 0);
+                int len = generatemoves(color, 0, 0);
                 int played = -1;
                 for (int j = 0; j < len; j++) {
                     if (algebraic(moves[0][j])==mov) {
@@ -1402,7 +1567,11 @@ void uci() {
         }
         autoplay(sum);
     }
+    if (ucicommand.substr(0, 10) == "set output") {
+        textoutput = ucicommand.substr(11, ucicommand.length()-11);
+    }
     if (ucicommand.substr(0, 8) == "generate") {
+        gameoutput.open(textoutput, ofstream::app);
         int sum = 0;
         int add = 1;
         int reader = ucicommand.length()-1;
@@ -1414,6 +1583,11 @@ void uci() {
         for (int i = 0; i < sum; i++) {
             autoplay(30000);
         }
+        gameoutput.close();
+    }
+    if (ucicommand.substr(0, 7) == "extract") {
+        string input = ucicommand.substr(8, ucicommand.length()-8);
+        extractTexel(input);
     }
 }
 int main() {
@@ -1424,7 +1598,6 @@ int main() {
     initializezobrist();
     initializett();
     srand(time(0));
-    gameoutput.open("doublemove data.txt", ofstream::app);
     while (true) {
         uci();
     }
