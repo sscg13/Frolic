@@ -255,7 +255,7 @@ double get_original_eval() {
     double mideval = evalm[0]-evalm[1];
     double endeval = evale[0]-evale[1];
     int progress = 200-halfmove;
-    double base = (mideval*midphase+endeval*endphase)/24;
+    double base = (mideval*midphase+endeval*endphase)/48;
     double eval = (base*progress)/200;
     return eval;
 }
@@ -355,8 +355,8 @@ void update_gradients() {
         for (int j = 0; j < 64; j++) {
             pstmadagrad[i][j] += pow(pstmgrad[i][j], 2);
             psteadagrad[i][j] += pow(pstegrad[i][j], 2);
-            pstm[i][j] -= lr*pstmgrad[i][j]/(0.0001 + pow(pstmadagrad[i][j], 0.5));
-            pste[i][j] -= lr*pstegrad[i][j]/(0.0001 + pow(psteadagrad[i][j], 0.5));
+            pstm[i][j] -= lr*pstmgrad[i][j]/(0.00000001 + pow(pstmadagrad[i][j], 0.5));
+            pste[i][j] -= lr*pstegrad[i][j]/(0.00000001 + pow(psteadagrad[i][j], 0.5));
         }
     }
 }
