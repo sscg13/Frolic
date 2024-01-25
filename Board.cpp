@@ -1218,7 +1218,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     if (movcount == 0) {
         return -1*(depth+28000-initialdepth);
     }
-    if ((!incheck && gamephase[color] > 0) && (depth > 1 && nmp)) {
+    if ((!incheck && gamephase[color] > 0) && (depth > 1 && nmp) && (staticeval >= beta)) {
         makenullmove();
         score = -alphabeta(max(0, depth-2-(depth+1)/3), initialdepth, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
@@ -1255,7 +1255,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((movescore[depth][i] < 3000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
+        int r = ((movescore[depth][i] < 10000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
         if ((r > 0) && isPV && !incheck) {
             r--;
         }
