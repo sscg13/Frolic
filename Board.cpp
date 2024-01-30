@@ -1497,11 +1497,12 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((movescore[ply][i] < 2500) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
+        int r = ((movescore[ply][i] < 10000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
         if (checkers(color) != 0ULL || beta-alpha > 1) {
             r--;
         }
         r = max(0, r);
+        int e = (movcount == 1) ? 1 : 0;
         //bool prune = ((beta-alpha < 2) && (depth < 5) && (i > 6+4*depth) && movescore[depth][i] < 1000);
         if (!stopsearch) {
             makemove(moves[ply][i], true);
@@ -1512,7 +1513,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
                 }
             }
             else {
-                score = -alphabeta(depth-1, ply+1, -beta, -alpha, color^1, true, nodelimit, timelimit);
+                score = -alphabeta(depth-1+e, ply+1, -beta, -alpha, color^1, true, nodelimit, timelimit);
             }
             unmakemove(moves[ply][i]);
             if (score > bestscore) {
