@@ -1426,7 +1426,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     int bestmove1 = -1;
     int ttdepth = TT[index].depth;
     int ttage = max(gamelength-TT[index].age, 0);
-    bool update = (depth > (ttdepth-ttage/3));
+    bool update = (depth >= (ttdepth-ttage/3));
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
