@@ -1107,6 +1107,60 @@ int evaluate(int color) {
     int base = (mideval*midphase+endeval*endphase)/48+10;
     return (base*progress)/200;
 }
+bool see_exceeds(int move, int color, int threshold) {
+    int see_values[6] = {100, 100, 170, 370, 640, 20000};
+    int target = (move >> 6)&63;
+    int victim = (move >> 17)&7;
+    int attacker = (move >> 13)&7;
+    int value = (victim > 0) ? see_values[victim-2]-threshold : -threshold;
+    if (value < 0) {
+        return false;
+    }
+    if (value - see_values[attacker-2] >= 0) {
+        return true;
+    }
+    int pieces[2][6] = {{0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}};
+    U64 occupied = Bitboards[0] | Bitboards[1];
+    U64 us = Bitboards[color];
+    U64 enemy = Bitboards[color^1];
+    U64 alfils = AlfilAttacks[target]&Bitboards[3];
+    U64 ferzes = FerzAttacks[target]&Bitboards[4];
+    U64 knights = KnightAttacks[target]&Bitboards[5];
+    U64 kings = KingAttacks[target]&Bitboards[7];
+    occupied^=(enemy&Bitboards[7]);
+    pieces[0][0] = popcount((PawnAttacks[color][target]&Bitboards[2]&enemy));
+    pieces[0][1] = popcount(alfils&enemy);
+    pieces[0][2] = popcount(ferzes&enemy);
+    pieces[0][3] = popcount(knights&enemy);
+    pieces[0][4] = popcount((FileAttacks(occupied, target)|GetRankAttacks(occupied, target))&Bitboards[6]&enemy);
+    pieces[0][5] = popcount(kings&enemy);
+    occupied^=(Bitboards[7]);
+    pieces[1][0] = popcount((PawnAttacks[color^1][target]&Bitboards[2]&us));
+    pieces[1][1] = popcount(alfils&us);
+    pieces[1][2] = popcount(ferzes&us);
+    pieces[1][3] = popcount(knights&us);
+    pieces[1][4] = popcount((FileAttacks(occupied, target)|GetRankAttacks(occupied, target))&Bitboards[6]&us);
+    pieces[1][5] = popcount(kings&us);
+    pieces[1][attacker-2]--;
+    int next[2] = {0, 0};
+    int previous[2] = {0, attacker-2};
+    int i = 0;
+    while (true) {
+        while (pieces[i][next[i]] == 0 && next[i] < 6) {
+            next[i]++;
+        }
+        if (next[i] > 5) {
+            return (value >= 0);
+        }
+        value += (2*i-1)*see_values[previous[i^1]];
+        if ((2*i-1)*(value + (1-2*i)*see_values[next[i]]) >= 1-i) {
+            return i;
+        }
+        previous[i] = next[i];
+        pieces[i][next[i]]--;
+        i^=1;
+    }
+}
 int quiesce(int alpha, int beta, int color, int depth) {
     int score = evaluate(color);
     int bestscore = -30000;
@@ -1811,6 +1865,18 @@ void uci() {
         datainput.close();
         bookoutput.close();
         cout << "Extraction done \n";
+    }
+    if (ucicommand.substr(0, 3) == "see") {
+        string mov = ucicommand.substr(4, ucicommand.length()-4);
+        int color = position&1;
+        int movcount = generatemoves(color, 0, 0);
+        int move = 0;
+        for (int i = 0; i < movcount; i++) {
+            if (algebraic(moves[0][i]) == mov) {
+                move = moves[0][i];
+            }
+        }
+        cout << algebraic(move) << " " << see_exceeds(move, color, 0) << "\n";
     }
 }
 void xboard() {
