@@ -1121,6 +1121,7 @@ bool see_exceeds(int move, int color, int threshold) {
     }
     int pieces[2][6] = {{0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}};
     U64 occupied = Bitboards[0] | Bitboards[1];
+    occupied^=(1ULL << (move&63));
     U64 us = Bitboards[color];
     U64 enemy = Bitboards[color^1];
     U64 alfils = AlfilAttacks[target]&Bitboards[3];
@@ -1141,7 +1142,9 @@ bool see_exceeds(int move, int color, int threshold) {
     pieces[1][3] = popcount(knights&us);
     pieces[1][4] = popcount((FileAttacks(occupied, target)|GetRankAttacks(occupied, target))&Bitboards[6]&us);
     pieces[1][5] = popcount(kings&us);
-    pieces[1][attacker-2]--;
+    if (attacker > 2) {
+        pieces[1][attacker-2]--;
+    }
     int next[2] = {0, 0};
     int previous[2] = {0, attacker-2};
     int i = 0;
@@ -1168,7 +1171,8 @@ int quiesce(int alpha, int beta, int color, int depth) {
     if (depth > 3) {
         return score;
     }
-    if (checkers(color)) {
+    bool incheck = checkers(color);
+    if (incheck) {
         movcount = generatemoves(color, 0, maxdepth+depth);
         if (movcount == 0) {
             return -27000;
@@ -1189,6 +1193,9 @@ int quiesce(int alpha, int beta, int color, int depth) {
             int j = i;
             int temp1 = 0;
             int temp2 = 0;
+            /*if (see_exceeds(moves[maxdepth+depth][i], color, 0)) {
+                movescore[maxdepth+depth][i]+=15000;
+            }*/
             while (j > 0 && movescore[maxdepth+depth][j] > movescore[maxdepth+depth][j-1]) {
                 swap(moves[maxdepth+depth][j], moves[maxdepth+depth][j-1]);
                 swap(movescore[maxdepth+depth][j], movescore[maxdepth+depth][j-1]);
@@ -1197,23 +1204,29 @@ int quiesce(int alpha, int beta, int color, int depth) {
         }
     }
     for (int i = 0; i < movcount; i++) {
-        makemove(moves[maxdepth+depth][i], 1);
-        score = -quiesce(-beta, -alpha, color^1, depth+1);
-        unmakemove(moves[maxdepth+depth][i]);
-        if (score >= beta) {
-            return score;
-        }
-        if (score > alpha) {
-            alpha = score;
-        }
-        if (score > bestscore) {
-            bestscore = score;
+        bool good = (incheck || see_exceeds(moves[maxdepth+depth][i], color, 0));
+        if (good) {
+            makemove(moves[maxdepth+depth][i], 1);
+            score = -quiesce(-beta, -alpha, color^1, depth+1);
+            unmakemove(moves[maxdepth+depth][i]);
+            if (score >= beta) {
+                return score;
+            }
+            if (score > alpha) {
+                alpha = score;
+            }
+            if (score > bestscore) {
+                bestscore = score;
+            }
         }
     }
     return bestscore;
 }
 int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool nmp, int nodelimit, int timelimit) {
     if (repetitions() > 1) {
+        return 0;
+    }
+    if ((position >> 1) >= 140) {
         return 0;
     }
     if ((Bitboards[0]|Bitboards[1]) == Bitboards[7]) {
@@ -1234,7 +1247,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
     int bestmove1 = -1;
     int ttdepth = TT[index].depth;
     int ttage = max(gamelength-TT[index].age, 0);
-    bool update = (depth > (ttdepth-ttage/3));
+    bool update = (depth >= (ttdepth-ttage/3));
     bool incheck = (checkers(color) != 0ULL);
     bool isPV = (beta-alpha > 1);
     if (TT[index].key == zobristhash) {
@@ -1300,6 +1313,9 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             if (moves[depth][i] == killers[depth][1]) {
                 movescore[depth][i]+=10000;
             }
+            /*if (see_exceeds(moves[depth][i], color, 0)) {
+                movescore[depth][i]+=15000;
+            }*/
             while (j > 0 && movescore[depth][j] > movescore[depth][j-1]) {
                 swap(moves[depth][j], moves[depth][j-1]);
                 swap(movescore[depth][j], movescore[depth][j-1]);
