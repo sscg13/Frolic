@@ -78,6 +78,18 @@ bool suppressoutput = false;
 //26 bits total for now?
 int movecount;
 auto start = chrono::steady_clock::now();
+int nnuesize = 32;
+short int nnuelayer1[768][32];
+short int layer1bias[32];
+int ourlayer2[32];
+int theirlayer2[32];
+short int whitehidden[32];
+short int blackhidden[32];
+short int whiteaccumulator[32];
+short int blackaccumulator[32];
+int finalbias;
+int evalscale = 400;
+int evalQ = (255*64);
 int materialm[6] = {78, 77, 144, 415, 657, 20000};
 int materiale[6] = {85, 113, 139, 402, 905, 20000};
 int pstm[6][64] = {{0,0,0,0,0,0,0,0,-61,-2,14,19,-9,-5,-7,-35,-54,24,12,23,8,3,-3,-34,-28,-12,18,48,18,9,-2,-35,0,-17,13,53,-7,4,-19,-34,-14,-4,4,-2,8,-26,-16,-23,9,18,20,28,29,14,9,-2,0,0,0,0,0,0,0,0},
@@ -120,6 +132,9 @@ struct TTentry {
 };
 int TTsize = 1349651;
 TTentry TT[1349651];
+int crelu(short int x) {
+    return max(min((int) x, 255), 0);
+}
 U64 shift_w(U64 bitboard) {
     return (bitboard & ~FileA) >> 1;
 }
@@ -1098,6 +1113,120 @@ string getFEN() {
     FEN = FEN + bruh + " 1";
     return FEN;
 }
+void readnnuefile(string file) {
+    ifstream nnueweights;
+    nnueweights.open(file, ifstream::binary);
+    for (int i = 0; i < 768; i++) {
+        int piece = i/64;
+        int square = i%64;
+        int convert[12] = {0, 3, 1, 4, 2, 5, 6, 9, 7, 10, 8, 11};
+        for (int j = 0; j < nnuesize; j++) {
+            char* weights = new char[2];
+            nnueweights.read(weights, 2);
+            short int weight = 256*(short int)(weights[1])+(short int)(unsigned char)(weights[0]);
+            nnuelayer1[64*convert[piece]+square][j] = weight;
+        }
+    }
+    for (int i = 0; i < nnuesize; i++) {
+        char* biases = new char[2];
+        nnueweights.read(biases, 2);
+        short int bias = 256*(short int)(biases[1])+(short int)(unsigned char)(biases[0]);
+        layer1bias[i] = bias;
+    }
+    for (int i = 0; i < nnuesize; i++) {
+        char* weights = new char[2];
+        nnueweights.read(weights, 2);
+        short int weight = 256*(short int)(weights[1])+(short int)(unsigned char)(weights[0]);
+        ourlayer2[i] = (int)weight;
+    }
+    for (int i = 0; i < nnuesize; i++) {
+        char* weights = new char[2];
+        nnueweights.read(weights, 2);
+        short int weight = 256*(short int)(weights[1])+(short int)(unsigned char)(weights[0]);
+        theirlayer2[i] = (int)weight;
+    }
+    char* bases = new char[2];
+    nnueweights.read(bases, 2);
+    short int base = 256*(short int)(bases[1])+(short int)(unsigned char)(bases[0]);
+    finalbias = base;
+    nnueweights.close();
+}
+void initializennue() {
+    for (int i = 0; i < nnuesize; i++) {
+        whitehidden[i] = layer1bias[i];
+        blackhidden[i] = layer1bias[i];
+        whiteaccumulator[i] = 0;
+        blackaccumulator[i] = 0;
+    }
+    for (int i = 0; i < 12; i++) {
+        U64 pieces = (Bitboards[i/6]&Bitboards[2+(i%6)]);
+        int piececount = popcount(pieces);
+        for (int j = 0; j < piececount; j++) {
+            int square = popcount((pieces & -pieces)-1);
+            for (int k = 0; k < nnuesize; k++) {
+                whitehidden[k] += nnuelayer1[64*i+square][k];
+                blackhidden[k] += nnuelayer1[64*((i+6)%12)+56^square][k];
+            }
+            pieces^=(1ULL << square);
+        }
+    }
+}
+void forwardaccumulators(int notation) {
+    int from = notation & 63;
+    int to = (notation >> 6) & 63;
+    int color = (notation >> 12) & 1;
+    int piece = (notation >> 13) & 7;
+    int captured = (notation >> 17) & 7;
+    int promoted = (notation >> 21) & 3;
+    int piece2 = (promoted > 0) ? piece : piece-2;
+    for (int i = 0; i < nnuesize; i++) {
+        whiteaccumulator[i] += nnuelayer1[64*(6*color+piece2)+to][i];
+        whiteaccumulator[i] -= nnuelayer1[64*(6*color+piece-2)+from][i];
+        blackaccumulator[i] += nnuelayer1[64*(6*(color^1)+piece2)+56^to][i];
+        blackaccumulator[i] -= nnuelayer1[64*(6*(color^1)+piece-2)+56^from][i];
+        if (captured > 0) {
+            whiteaccumulator[i] -= nnuelayer1[64*(6*(color^1)+captured-2)+to][i];
+            blackaccumulator[i] -= nnuelayer1[64*(6*color+captured-2)+56^to][i];
+        }
+    }
+}
+void backwardaccumulators(int notation) {
+    int from = notation & 63;
+    int to = (notation >> 6) & 63;
+    int color = (notation >> 12) & 1;
+    int piece = (notation >> 13) & 7;
+    int captured = (notation >> 17) & 7;
+    int promoted = (notation >> 21) & 3;
+    int piece2 = promoted ? piece : piece-2;
+    for (int i = 0; i < nnuesize; i++) {
+        whiteaccumulator[i] -= nnuelayer1[64*(6*color+piece2)+to][i];
+        whiteaccumulator[i] += nnuelayer1[64*(6*color+piece-2)+from][i];
+        blackaccumulator[i] -= nnuelayer1[64*(6*(color^1)+piece2)+56^to][i];
+        blackaccumulator[i] += nnuelayer1[64*(6*(color^1)+piece-2)+56^from][i];
+        if (captured > 0) {
+            whiteaccumulator[i] += nnuelayer1[64*(6*(color^1)+captured-2)+to][i];
+            blackaccumulator[i] += nnuelayer1[64*(6*color+captured-2)+56^to][i];
+        }
+    }
+}
+int evalnnue(int color) {
+    int eval = finalbias;
+    if (color == 0) {
+        for (int i = 0; i < nnuesize; i++) {
+            eval += crelu(whitehidden[i]+whiteaccumulator[i])*ourlayer2[i];
+            eval += crelu(blackhidden[i]+blackaccumulator[i])*theirlayer2[i];
+        }
+    }
+    else {
+        for (int i = 0; i < nnuesize; i++) {
+            eval += crelu(whitehidden[i]+whiteaccumulator[i])*theirlayer2[i];
+            eval += crelu(blackhidden[i]+blackaccumulator[i])*ourlayer2[i];
+        }
+    }
+    eval *= evalscale;
+    eval /= evalQ;
+    return eval;
+}
 int evaluate(int color) {
     int midphase = min(48, gamephase[0]+gamephase[1]);
     int endphase = 48-midphase;
@@ -1165,7 +1294,7 @@ bool see_exceeds(int move, int color, int threshold) {
     }
 }
 int quiesce(int alpha, int beta, int color, int depth) {
-    int score = evaluate(color);
+    int score = evalnnue(color);//evaluate(color);
     int bestscore = -30000;
     int movcount;
     if (depth > 3) {
@@ -1207,8 +1336,10 @@ int quiesce(int alpha, int beta, int color, int depth) {
         bool good = (incheck || see_exceeds(moves[maxdepth+depth][i], color, 0));
         if (good) {
             makemove(moves[maxdepth+depth][i], 1);
+            forwardaccumulators(moves[maxdepth+depth][i]);
             score = -quiesce(-beta, -alpha, color^1, depth+1);
             unmakemove(moves[maxdepth+depth][i]);
+            backwardaccumulators(moves[maxdepth+depth][i]);
             if (score >= beta) {
                 return score;
             }
@@ -1331,6 +1462,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         }
         if (!stopsearch) {
             makemove(moves[depth][i], true);
+            forwardaccumulators(moves[depth][i]);
             if (nullwindow) {
                 score = -alphabeta(depth-1-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
                 if (score > alpha && score < beta) {
@@ -1341,6 +1473,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                 score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
             }
             unmakemove(moves[depth][i]);
+            backwardaccumulators(moves[depth][i]);
             if (score > bestscore) {
                 if (score > alpha) {
                     if (score >= beta) {
@@ -1634,6 +1767,7 @@ void uci() {
     if (ucicommand == "ucinewgame") {
         initializett();
         initializeboard();
+        initializennue();
     }
     if (ucicommand.substr(0, 17) == "position startpos") {
         initializeboard();
@@ -1658,6 +1792,7 @@ void uci() {
                 mov+=ucicommand[i];
             }
         }
+        initializennue();
     }
     if (ucicommand.substr(0, 12) == "position fen") {
         int reader = 13;
@@ -1687,6 +1822,7 @@ void uci() {
                 mov+=ucicommand[i];
             }
         }
+        initializennue();
     }
     if (ucicommand.substr(0, 8) == "go wtime") {
         int wtime;
@@ -1901,6 +2037,10 @@ void uci() {
         }
         cout << algebraic(move) << " " << see_exceeds(move, color, 0) << "\n";
     }
+    if (ucicommand == "evaluate nnue") {
+        int color = position&1;
+        cout << evalnnue(color) << "\n";
+    }
 }
 void xboard() {
     string xcommand;
@@ -2017,6 +2157,9 @@ int main() {
     initializezobrist();
     initializelmr();
     initializett();
+    resethistory();
+    readnnuefile("shatranj-768x32.nnue");
+    initializennue();
     srand(time(0));
     getline(cin, proto);
     if (proto == "uci") {
