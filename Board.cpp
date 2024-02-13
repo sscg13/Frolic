@@ -78,6 +78,7 @@ bool suppressoutput = false;
 //26 bits total for now?
 int movecount;
 auto start = chrono::steady_clock::now();
+bool useNNUE = false;
 int nnuesize = 32;
 short int nnuelayer1[768][32];
 short int layer1bias[32];
@@ -1294,7 +1295,7 @@ bool see_exceeds(int move, int color, int threshold) {
     }
 }
 int quiesce(int alpha, int beta, int color, int depth) {
-    int score = evalnnue(color);//evaluate(color);
+    int score = useNNUE ? evalnnue(color) : evaluate(color);
     int bestscore = -30000;
     int movcount;
     if (depth > 3) {
@@ -1336,10 +1337,14 @@ int quiesce(int alpha, int beta, int color, int depth) {
         bool good = (incheck || see_exceeds(moves[maxdepth+depth][i], color, 0));
         if (good) {
             makemove(moves[maxdepth+depth][i], 1);
-            forwardaccumulators(moves[maxdepth+depth][i]);
+            if (useNNUE) {
+                forwardaccumulators(moves[maxdepth+depth][i]);
+            }
             score = -quiesce(-beta, -alpha, color^1, depth+1);
             unmakemove(moves[maxdepth+depth][i]);
-            backwardaccumulators(moves[maxdepth+depth][i]);
+            if (useNNUE) {
+                backwardaccumulators(moves[maxdepth+depth][i]);
+            }
             if (score >= beta) {
                 return score;
             }
@@ -1386,7 +1391,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         ttmove = TT[index].hashmove;
         int nodetype = TT[index].nodetype;
         if (ttdepth >= depth) {
-            if (bestmove >= 0 && repetitions() == 0) {
+            if (!isPV && repetitions() == 0) {
                 if (nodetype == 3) {
                     return score;
                 }
@@ -1462,7 +1467,9 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
         }
         if (!stopsearch) {
             makemove(moves[depth][i], true);
-            forwardaccumulators(moves[depth][i]);
+            if (useNNUE) {
+                forwardaccumulators(moves[depth][i]);
+            }
             if (nullwindow) {
                 score = -alphabeta(depth-1-r, initialdepth, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
                 if (score > alpha && score < beta) {
@@ -1473,7 +1480,9 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
                 score = -alphabeta(depth-1, initialdepth, -beta, -alpha, color^1, true, nodelimit, timelimit);
             }
             unmakemove(moves[depth][i]);
-            backwardaccumulators(moves[depth][i]);
+            if (useNNUE) {
+                backwardaccumulators(moves[depth][i]);
+            }
             if (score > bestscore) {
                 if (score > alpha) {
                     if (score >= beta) {
@@ -2017,13 +2026,12 @@ void uci() {
         bookoutput.close();
         cout << "Generation done \n";
     }
-    if (ucicommand == "extract") {
-        bookoutput.open(outputfile, ofstream::app);
-        datainput.open(inputfile, ifstream::app);
-        extractTexel();
-        datainput.close();
-        bookoutput.close();
-        cout << "Extraction done \n";
+    if (ucicommand.substr(0, 23) == "setoption name EvalFile") {
+        string nnuefile = ucicommand.substr(30, ucicommand.length()-30);
+        if (nnuefile != "<empty>") {
+            readnnuefile(nnuefile);
+            useNNUE = true;
+        }
     }
     if (ucicommand.substr(0, 3) == "see") {
         string mov = ucicommand.substr(4, ucicommand.length()-4);
@@ -2036,10 +2044,6 @@ void uci() {
             }
         }
         cout << algebraic(move) << " " << see_exceeds(move, color, 0) << "\n";
-    }
-    if (ucicommand == "evaluate nnue") {
-        int color = position&1;
-        cout << evalnnue(color) << "\n";
     }
 }
 void xboard() {
@@ -2158,12 +2162,11 @@ int main() {
     initializelmr();
     initializett();
     resethistory();
-    readnnuefile("shatranj-768x32.nnue");
-    initializennue();
     srand(time(0));
     getline(cin, proto);
     if (proto == "uci") {
-        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "option name UCI_Variant type combo default shatranj var shatranj \n" << "uciok\n";
+        cout << "id name sscg13 chess engine \n" << "id author sscg13 \n" << "option name UCI_Variant type combo default shatranj var shatranj \n";
+        cout << "option name EvalFile type string default <empty> \n" << "uciok\n";
         while (true) {
             uci();
         }
