@@ -1427,12 +1427,13 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     int ttdepth = TT[index].depth;
     int ttage = max(gamelength-TT[index].age, 0);
     bool update = (depth >= (ttdepth-ttage/3));
+    bool isPV = (beta-alpha > 1);
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
         int nodetype = TT[index].nodetype;
         if (ttdepth >= depth) {
-            if (bestmove >= 0 && repetitions() == 0) {
+            if (!isPV && repetitions() == 0) {
                 if (nodetype == 3) {
                     return score;
                 }
