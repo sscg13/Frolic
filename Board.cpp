@@ -86,8 +86,6 @@ int ourlayer2[32];
 int theirlayer2[32];
 short int whitehidden[32];
 short int blackhidden[32];
-short int whiteaccumulator[32];
-short int blackaccumulator[32];
 int finalbias;
 int evalscale = 400;
 int evalQ = (255*64);
@@ -1156,8 +1154,6 @@ void initializennue() {
     for (int i = 0; i < nnuesize; i++) {
         whitehidden[i] = layer1bias[i];
         blackhidden[i] = layer1bias[i];
-        whiteaccumulator[i] = 0;
-        blackaccumulator[i] = 0;
     }
     for (int i = 0; i < 12; i++) {
         U64 pieces = (Bitboards[i/6]&Bitboards[2+(i%6)]);
@@ -1181,13 +1177,13 @@ void forwardaccumulators(int notation) {
     int promoted = (notation >> 21) & 3;
     int piece2 = (promoted > 0) ? piece : piece-2;
     for (int i = 0; i < nnuesize; i++) {
-        whiteaccumulator[i] += nnuelayer1[64*(6*color+piece2)+to][i];
-        whiteaccumulator[i] -= nnuelayer1[64*(6*color+piece-2)+from][i];
-        blackaccumulator[i] += nnuelayer1[64*(6*(color^1)+piece2)+56^to][i];
-        blackaccumulator[i] -= nnuelayer1[64*(6*(color^1)+piece-2)+56^from][i];
+        whitehidden[i] += nnuelayer1[64*(6*color+piece2)+to][i];
+        whitehidden[i] -= nnuelayer1[64*(6*color+piece-2)+from][i];
+        blackhidden[i] += nnuelayer1[64*(6*(color^1)+piece2)+56^to][i];
+        blackhidden[i] -= nnuelayer1[64*(6*(color^1)+piece-2)+56^from][i];
         if (captured > 0) {
-            whiteaccumulator[i] -= nnuelayer1[64*(6*(color^1)+captured-2)+to][i];
-            blackaccumulator[i] -= nnuelayer1[64*(6*color+captured-2)+56^to][i];
+            whitehidden[i] -= nnuelayer1[64*(6*(color^1)+captured-2)+to][i];
+            blackhidden[i] -= nnuelayer1[64*(6*color+captured-2)+56^to][i];
         }
     }
 }
@@ -1200,13 +1196,13 @@ void backwardaccumulators(int notation) {
     int promoted = (notation >> 21) & 3;
     int piece2 = promoted ? piece : piece-2;
     for (int i = 0; i < nnuesize; i++) {
-        whiteaccumulator[i] -= nnuelayer1[64*(6*color+piece2)+to][i];
-        whiteaccumulator[i] += nnuelayer1[64*(6*color+piece-2)+from][i];
-        blackaccumulator[i] -= nnuelayer1[64*(6*(color^1)+piece2)+56^to][i];
-        blackaccumulator[i] += nnuelayer1[64*(6*(color^1)+piece-2)+56^from][i];
+        whitehidden[i] -= nnuelayer1[64*(6*color+piece2)+to][i];
+        whitehidden[i] += nnuelayer1[64*(6*color+piece-2)+from][i];
+        blackhidden[i] -= nnuelayer1[64*(6*(color^1)+piece2)+56^to][i];
+        blackhidden[i] += nnuelayer1[64*(6*(color^1)+piece-2)+56^from][i];
         if (captured > 0) {
-            whiteaccumulator[i] += nnuelayer1[64*(6*(color^1)+captured-2)+to][i];
-            blackaccumulator[i] += nnuelayer1[64*(6*color+captured-2)+56^to][i];
+            whitehidden[i] += nnuelayer1[64*(6*(color^1)+captured-2)+to][i];
+            blackhidden[i] += nnuelayer1[64*(6*color+captured-2)+56^to][i];
         }
     }
 }
@@ -1214,14 +1210,14 @@ int evalnnue(int color) {
     int eval = finalbias;
     if (color == 0) {
         for (int i = 0; i < nnuesize; i++) {
-            eval += crelu(whitehidden[i]+whiteaccumulator[i])*ourlayer2[i];
-            eval += crelu(blackhidden[i]+blackaccumulator[i])*theirlayer2[i];
+            eval += crelu(whitehidden[i])*ourlayer2[i];
+            eval += crelu(blackhidden[i])*theirlayer2[i];
         }
     }
     else {
         for (int i = 0; i < nnuesize; i++) {
-            eval += crelu(whitehidden[i]+whiteaccumulator[i])*theirlayer2[i];
-            eval += crelu(blackhidden[i]+blackaccumulator[i])*ourlayer2[i];
+            eval += crelu(whitehidden[i])*theirlayer2[i];
+            eval += crelu(blackhidden[i])*ourlayer2[i];
         }
     }
     eval *= evalscale;
