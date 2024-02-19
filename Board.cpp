@@ -1410,7 +1410,7 @@ int alphabeta(int depth, int initialdepth, int alpha, int beta, int color, bool 
             }
         }
     }
-    int staticeval = evaluate(color);
+    int staticeval = useNNUE ? evalnnue(color) : evaluate(color);
     int margin = 75*depth;
     if (depth < initialdepth && score == -30000) {
         if (staticeval-margin >= beta && (abs(beta) < 27000 && !incheck)) {
