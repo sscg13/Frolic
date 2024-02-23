@@ -1702,7 +1702,6 @@ void autoplay(int nodes) {
     for (int i = 0; i < max; i++) {
         bookoutput << fens[i] << " | " << scores[i] << " | " << result << "\n";
     }
-    cout << "game finished \n";
     suppressoutput = false;
     initializett();
     resethistory();
@@ -2018,6 +2017,7 @@ void uci() {
         }
         for (int i = 0; i < sum; i++) {
             autoplay(10000);
+            cout << i << "\n";
         }
         bookoutput.close();
         cout << "Generation done \n";
@@ -2027,6 +2027,9 @@ void uci() {
         if (nnuefile != "<empty>") {
             readnnuefile(nnuefile);
             useNNUE = true;
+        }
+        else {
+            useNNUE = false;
         }
     }
     if (ucicommand.substr(0, 3) == "see") {
