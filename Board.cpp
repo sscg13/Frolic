@@ -1655,6 +1655,9 @@ void autoplay(int nodes) {
         game += algebraic(moves[0][rand_move]);
         game += " ";
     }
+    if (useNNUE) {
+        initializennue();
+    }
     string fens[1024];
     int scores[1024];
     int max = 0;
@@ -1697,6 +1700,9 @@ void autoplay(int nodes) {
         else if ((position >> 1) >= 140) {
             finished = true;
             result = "0.5";
+        }
+        if (useNNUE) {
+            forwardaccumulators(bestmove);
         }
     }
     for (int i = 0; i < max; i++) {
