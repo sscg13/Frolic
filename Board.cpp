@@ -353,6 +353,9 @@ void unmakenullmove() {
     position = history[gamelength];
     zobristhash = zobrist[gamelength];
 }
+bool iscapture(int notation) {
+    return ((notation >> 16)&1);
+}
 void makemove(int notation, bool reversible) {
     //6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit capture, 3 bits piece captured, 1 bit promotion,
     //2 bits promoted piece, 1 bit castling, 1 bit double pawn push, 1 bit en passant,
@@ -1382,6 +1385,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     bool update = (depth >= (ttdepth-ttage/3));
     bool incheck = (checkers(color) != 0ULL);
     bool isPV = (beta-alpha > 1);
+    int quiets = 0;
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
@@ -1457,10 +1461,12 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((movescore[ply][i] < 10000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
-        if ((r > 0) && isPV && !incheck) {
-            r--;
+        int r = 0;
+        if (!iscapture(moves[ply][i])) {
+            quiets++;
+            r = min(depth-1, lmr_reductions[depth][i]);
         }
+        r = max(0, r-isPV-movescore[ply][i]/12000);
         if (!stopsearch) {
             makemove(moves[ply][i], true);
             if (useNNUE) {
