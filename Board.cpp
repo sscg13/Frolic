@@ -1421,7 +1421,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     if (movcount == 0) {
         return -1*(28000-ply);
     }
-    if ((!incheck && gamephase[color] > 0) && (depth > 1 && nmp) && (staticeval >= beta)) {
+    if ((!incheck && gamephase[color] > 3) && (depth > 1 && nmp) && (staticeval >= beta)) {
         makenullmove();
         score = -alphabeta(max(0, depth-2-(depth+1)/3), ply+1, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
