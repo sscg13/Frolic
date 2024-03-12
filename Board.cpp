@@ -1745,6 +1745,13 @@ void autoplay(int nodes) {
   string result = "";
   for (int i = 0; i < 8; i++) {
     int num_moves = generatemoves(i & 1, 0, 0);
+    if (num_moves == 0) {
+      suppressoutput = false;
+      initializett();
+      resethistory();
+      initializeboard();
+      return;
+    }
     int rand_move = rand() % num_moves;
     makemove(moves[0][rand_move], 0);
     game += algebraic(moves[0][rand_move]);
@@ -1752,6 +1759,13 @@ void autoplay(int nodes) {
   }
   if (useNNUE) {
     initializennue();
+  }
+  if (generatemoves(0, 0, 0) == 0) {
+    suppressoutput = false;
+    initializett();
+    resethistory();
+    initializeboard();
+    return;
   }
   string fens[1024];
   int scores[1024];
