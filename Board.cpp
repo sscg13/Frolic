@@ -1484,7 +1484,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
     } else {
       int margin = 75 * (depth - ttdepth);
       if (((nodetype & 1) && (score - margin >= beta)) &&
-          (abs(beta) < 27000 && !incheck)) {
+          (abs(beta) < 27000 && !incheck) && (ply > 0)) {
         return score - margin;
       }
     }
@@ -1516,7 +1516,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
           return alpha;
       }
   }*/
-  if (depth > 1) {
+  if (depth > 0) {
     for (int i = 0; i < movcount; i++) {
       int j = i;
       int temp1 = 0;
@@ -1780,7 +1780,12 @@ void autoplay(int nodes) {
       scores[max] = score * (1 - 2 * color);
       max++;
     }
-    makemove(bestmove, 0);
+    if (bestmove == 0) {
+      cout << "Null best move? mitigating by using proper null move \n";
+      makenullmove();
+    } else {
+      makemove(bestmove, 0);
+    }
     if (popcount(Bitboards[0] | Bitboards[1]) == 2) {
       finished = true;
       result = "0.5";
@@ -1805,7 +1810,7 @@ void autoplay(int nodes) {
       finished = true;
       result = "0.5";
     }
-    if (useNNUE) {
+    if (useNNUE && bestmove > 0) {
       forwardaccumulators(bestmove);
     }
   }
@@ -2137,6 +2142,7 @@ void uci() {
     if (nnuefile != "<empty>") {
       readnnuefile(nnuefile);
       useNNUE = true;
+      cout << "info string using nnue file " << nnuefile << "\n";
     } else {
       useNNUE = false;
     }
