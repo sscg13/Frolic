@@ -1482,7 +1482,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
         }
       }
     } else {
-      int margin = 75 * (depth - ttdepth);
+      int margin = 60 * (depth - ttdepth);
       if (((nodetype & 1) && (score - margin >= beta)) &&
           (abs(beta) < 27000 && !incheck) && (ply > 0)) {
         return score - margin;
@@ -1490,7 +1490,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
     }
   }
   int staticeval = useNNUE ? evalnnue(color) : evaluate(color);
-  int margin = 75 * depth;
+  int margin = 60 * depth;
   if (ply > 0 && score == -30000) {
     if (staticeval - margin >= beta && (abs(beta) < 27000 && !incheck)) {
       return staticeval - margin;
@@ -1516,28 +1516,26 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
           return alpha;
       }
   }*/
-  if (depth > 0) {
-    for (int i = 0; i < movcount; i++) {
-      int j = i;
-      int temp1 = 0;
-      int temp2 = 0;
-      if (moves[ply][i] == ttmove) {
-        movescore[ply][i] = (1 << 20);
-      }
-      if (moves[ply][i] == killers[ply][0]) {
-        movescore[ply][i] += 20000;
-      }
-      if (moves[ply][i] == killers[ply][1]) {
-        movescore[ply][i] += 10000;
-      }
-      /*if (see_exceeds(moves[ply][i], color, 0)) {
-          movescore[ply][i]+=15000;
-      }*/
-      while (j > 0 && movescore[ply][j] > movescore[ply][j - 1]) {
-        swap(moves[ply][j], moves[ply][j - 1]);
-        swap(movescore[ply][j], movescore[ply][j - 1]);
-        j--;
-      }
+  for (int i = 0; i < movcount; i++) {
+    int j = i;
+    int temp1 = 0;
+    int temp2 = 0;
+    if (moves[ply][i] == ttmove) {
+      movescore[ply][i] = (1 << 20);
+    }
+    if (moves[ply][i] == killers[ply][0]) {
+      movescore[ply][i] += 20000;
+    }
+    if (moves[ply][i] == killers[ply][1]) {
+      movescore[ply][i] += 10000;
+    }
+    /*if (see_exceeds(moves[ply][i], color, 0)) {
+        movescore[ply][i]+=15000;
+    }*/
+    while (j > 0 && movescore[ply][j] > movescore[ply][j - 1]) {
+      swap(moves[ply][j], moves[ply][j - 1]);
+      swap(movescore[ply][j], movescore[ply][j - 1]);
+      j--;
     }
   }
   for (int i = 0; i < movcount; i++) {
