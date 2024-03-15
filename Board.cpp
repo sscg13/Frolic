@@ -1449,7 +1449,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   if ((Bitboards[color ^ 1] & Bitboards[7]) == Bitboards[color ^ 1]) {
     return (28002 - ply);
   }
-  if (depth == 0 || ply >= maxdepth) {
+  if (depth <= 0 || ply >= maxdepth) {
     return quiesce(alpha, beta, color, 0);
   }
   int score = -30000;
@@ -1510,9 +1510,9 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       return beta;
     }
   }
-  /*if (depth < 2 && (staticeval + 150*depth < alpha)) {
+  /*if ((depth < 3) && (staticeval + 150*depth < alpha) && !isPV) {
       int qsearchscore = quiesce(alpha, beta, color, 0);
-      if (qsearchscore < alpha) {
+      if (qsearchscore <= alpha) {
           return alpha;
       }
   }*/
@@ -1584,6 +1584,10 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
                  (depth * depth * depth *
                   historytable[color][piece - 2][target]) /
                      27000);
+            for (int j = 0; j < i; j++) {
+              historytable[color][((moves[ply][j] >> 13) & 7) - 2]
+                          [(moves[ply][j] >> 6) & 63] -= (depth * 3);
+            }
             return score;
           }
           alpha = score;
