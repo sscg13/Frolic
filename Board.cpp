@@ -1485,7 +1485,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       int margin = 60 * (depth - ttdepth);
       if (((nodetype & 1) && (score - margin >= beta)) &&
           (abs(beta) < 27000 && !incheck) && (ply > 0)) {
-        return score - margin;
+        return (score + beta) / 2;
       }
     }
   }
@@ -1493,7 +1493,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   int margin = 60 * depth;
   if (ply > 0 && score == -30000) {
     if (staticeval - margin >= beta && (abs(beta) < 27000 && !incheck)) {
-      return staticeval - margin;
+      return (staticeval + beta) / 2;
     }
   }
   movcount = generatemoves(color, 0, ply);
@@ -1510,7 +1510,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       return beta;
     }
   }
-  /*if ((depth < 3) && (staticeval + 150*depth < alpha) && !isPV) {
+  /*if ((depth < 3) && (staticeval + 100*depth < alpha) && !isPV) {
       int qsearchscore = quiesce(alpha, beta, color, 0);
       if (qsearchscore <= alpha) {
           return alpha;
