@@ -1189,6 +1189,7 @@ void readnnuefile(string file) {
       short int weight = 256 * (short int)(weights[1]) +
                          (short int)(unsigned char)(weights[0]);
       nnuelayer1[64 * convert[piece] + square][j] = weight;
+      delete[] weights;
     }
   }
   for (int i = 0; i < nnuesize; i++) {
@@ -1197,6 +1198,7 @@ void readnnuefile(string file) {
     short int bias =
         256 * (short int)(biases[1]) + (short int)(unsigned char)(biases[0]);
     layer1bias[i] = bias;
+    delete[] biases;
   }
   for (int i = 0; i < nnuesize; i++) {
     char *weights = new char[2];
@@ -1204,6 +1206,7 @@ void readnnuefile(string file) {
     short int weight =
         256 * (short int)(weights[1]) + (short int)(unsigned char)(weights[0]);
     ourlayer2[i] = (int)weight;
+    delete[] weights;
   }
   for (int i = 0; i < nnuesize; i++) {
     char *weights = new char[2];
@@ -1211,12 +1214,14 @@ void readnnuefile(string file) {
     short int weight =
         256 * (short int)(weights[1]) + (short int)(unsigned char)(weights[0]);
     theirlayer2[i] = (int)weight;
+    delete[] weights;
   }
   char *bases = new char[2];
   nnueweights.read(bases, 2);
   short int base =
       256 * (short int)(bases[1]) + (short int)(unsigned char)(bases[0]);
   finalbias = base;
+  delete[] bases;
   nnueweights.close();
 }
 void initializennue() {
