@@ -58,6 +58,7 @@ int moves[64][256];
 int movescore[64][256];
 int maxdepth = 32;
 int killers[32][2];
+int countermoves[6][64];
 int position = 0;
 int evalm[2] = {0, 0};
 int evale[2] = {0, 0};
@@ -303,8 +304,8 @@ void updatett(int index, int depth, int score, int nodetype, int hashmove) {
 void resethistory() {
   for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 64; j++) {
-      historytable[0][i][j] /= 2;
-      historytable[1][i][j] /= 2;
+      historytable[0][i][j] = 0;
+      historytable[1][i][j] = 0;
     }
   }
 }
