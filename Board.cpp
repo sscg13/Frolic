@@ -177,6 +177,11 @@ struct TTentry {
 };
 int TTsize = 1349651;
 TTentry TT[1349651];
+struct abinfo {
+  int hashmove;
+  int eval;
+};
+abinfo searchstack[64];
 int crelu(short int x) { return max(min((int)x, 255), 0); }
 U64 shift_w(U64 bitboard) { return (bitboard & ~FileA) >> 1; }
 U64 shift_n(U64 bitboard) { return bitboard << 8; }
@@ -1470,6 +1475,12 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   bool update = (depth >= (ttdepth - ttage / 3));
   bool incheck = (checkers(color) != 0ULL);
   bool isPV = (beta - alpha > 1);
+  int staticeval = useNNUE ? evalnnue(color) : evaluate(color);
+  searchstack[ply].eval = staticeval;
+  bool improving = false;
+  if (ply > 1) {
+    improving = (staticeval > searchstack[ply - 2].eval);
+  }
   int quiets = 0;
   if (TT[index].key == zobristhash) {
     score = TT[index].score;
@@ -1488,15 +1499,14 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
         }
       }
     } else {
-      int margin = 60 * (depth - ttdepth);
+      int margin = max(40, 70 * (depth - ttdepth - improving));
       if (((nodetype & 1) && (score - margin >= beta)) &&
           (abs(beta) < 27000 && !incheck) && (ply > 0)) {
         return (score + beta) / 2;
       }
     }
   }
-  int staticeval = useNNUE ? evalnnue(color) : evaluate(color);
-  int margin = 60 * depth;
+  int margin = max(40, 70 * (depth - improving));
   if (ply > 0 && score == -30000) {
     if (staticeval - margin >= beta && (abs(beta) < 27000 && !incheck)) {
       return (staticeval + beta) / 2;
