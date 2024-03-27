@@ -73,7 +73,6 @@ int nodecount = 0;
 int bestmove = 0;
 U64 zobristhash = 0ULL;
 int movetime = 0;
-int nodetime = 0;
 string proto = "uci";
 bool gosent = false;
 bool stopsearch = false;
@@ -1448,14 +1447,14 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
         else {
             int margin = 40+60*(depth-ttdepth);
             if ((nodetype&1) && (score-margin >= beta) && (abs(beta) < 27000) && checkers(color) == 0ULL) {
-                return score-margin;
+                return (score+beta)/2;
             }
         }
     }
     int margin = 40+60*depth;
     if (ply > 0 && score == -30000) {
         if (evaluate(color)-margin >= beta && (abs(beta) < 27000) && checkers(color) == 0ULL) {
-            return evaluate(color)-margin;
+            return (evaluate(color)+beta)/2;
         }
     }
     movcount = generatemoves(color, 0, ply);
@@ -1688,17 +1687,6 @@ void uci() {
         initializett();
         initializeboard();
     }
-    if (ucicommand.substr(0, 26) == "setoption name Force Nodes") {
-        int sum = 0;
-        int add = 1;
-        int reader = ucicommand.length()-1;
-        while (ucicommand[reader] != ' ') {
-            sum+=((int)(ucicommand[reader]-48))*add;
-            add*=10;
-            reader--;
-        }
-        nodetime = sum;
-    }
     if (ucicommand.substr(0, 17) == "position startpos") {
         initializeboard();
         int color = 0;
@@ -1827,11 +1815,11 @@ void uci() {
         }
         int color = position&1;
         if (color == 0) {
-            iterative(1000000000, wtime/40+winc/3, wtime/10+winc, 0);
+            iterative(1000000000, wtime/40+winc/3, max(wtime/2, wtime/10+winc), 0);
 
         }
         else {
-            iterative(1000000000, btime/40+binc/3, btime/10+binc, 1);
+            iterative(1000000000, btime/40+binc/3, max(btime/2, btime/10+binc), 1);
         }
     }
     if (ucicommand.substr(0, 11) == "go movetime") {
@@ -1856,12 +1844,7 @@ void uci() {
             reader--;
         }
         int color = position&1;
-        if (nodetime == 0) {
-            iterative(sum, 120000, 120000, color);
-        }
-        else {
-            iterative(nodetime, 120000, 120000, color);
-        }
+        iterative(sum, 120000, 120000, color);
     }
     if (ucicommand.substr(0, 11) == "go infinite") {
         int color = position&1;
