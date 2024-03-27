@@ -178,7 +178,7 @@ struct TTentry {
 int TTsize = 1349651;
 TTentry TT[1349651];
 struct abinfo {
-  int hashmove;
+  int playedmove;
   int eval;
 };
 abinfo searchstack[64];
@@ -311,6 +311,7 @@ void resethistory() {
     for (int j = 0; j < 64; j++) {
       historytable[0][i][j] = 0;
       historytable[1][i][j] = 0;
+      countermoves[i][j] = 0;
     }
   }
 }
@@ -1519,6 +1520,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   if ((!incheck && gamephase[color] > 3) && (depth > 1 && nmp) &&
       (staticeval >= beta)) {
     makenullmove();
+    searchstack[ply].playedmove = 0;
     score = -alphabeta(max(0, depth - 2 - (depth + 1) / 3), ply + 1, -beta,
                        1 - beta, color ^ 1, false, nodelimit, timelimit);
     unmakenullmove();
@@ -1526,12 +1528,22 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       return beta;
     }
   }
-  /*if ((depth < 3) && (staticeval + 100*depth < alpha) && !isPV) {
+  /*if ((depth < 3) && (staticeval + 200*depth < alpha) && !isPV) {
       int qsearchscore = quiesce(alpha, beta, color, 0);
       if (qsearchscore <= alpha) {
           return alpha;
       }
   }*/
+  int counter = 0;
+  int previousmove = 0;
+  int previouspiece = 0;
+  int previoussquare = 0;
+  if (ply > 0 && nmp) {
+    previousmove = searchstack[ply - 1].playedmove;
+    previouspiece = (previousmove >> 13) & 7;
+    previoussquare = (previousmove >> 6) & 63;
+    counter = countermoves[previouspiece - 2][previoussquare];
+  }
   for (int i = 0; i < movcount; i++) {
     int j = i;
     int temp1 = 0;
@@ -1542,7 +1554,10 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
     if (moves[ply][i] == killers[ply][0]) {
       movescore[ply][i] += 20000;
     }
-    if (moves[ply][i] == killers[ply][1]) {
+    /*else if (moves[ply][i] == killers[ply][1]) {
+      movescore[ply][i] += 10000;
+    }*/
+    else if ((moves[ply][i] & 4095) == counter) {
       movescore[ply][i] += 10000;
     }
     /*if (see_exceeds(moves[ply][i], color, 0)) {
@@ -1557,13 +1572,19 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   for (int i = 0; i < movcount; i++) {
     bool nullwindow = (i > 0);
     int r = 0;
+    bool prune = false;
     if (!iscapture(moves[ply][i])) {
       quiets++;
+      /*if (quiets > 7*depth) {
+        prune = true;
+      }*/
       r = min(depth - 1, lmr_reductions[depth][i]);
     }
     r = max(0, r - isPV - movescore[ply][i] / 12000);
-    if (!stopsearch) {
+    int e = (movcount == 1);
+    if (!stopsearch && !prune) {
       makemove(moves[ply][i], true);
+      searchstack[ply].playedmove = moves[ply][i];
       if (useNNUE) {
         forwardaccumulators(moves[ply][i]);
       }
@@ -1603,6 +1624,10 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
             for (int j = 0; j < i; j++) {
               historytable[color][((moves[ply][j] >> 13) & 7) - 2]
                           [(moves[ply][j] >> 6) & 63] -= (depth * 3);
+            }
+            if (ply > 0 && nmp) {
+              countermoves[previouspiece - 2][previoussquare] =
+                  (moves[ply][i] & 4095);
             }
             return score;
           }
@@ -2160,6 +2185,7 @@ void uci() {
     if (nnuefile != "<empty>") {
       readnnuefile(nnuefile);
       useNNUE = true;
+      initializennue();
       cout << "info string using nnue file " << nnuefile << "\n";
     } else {
       useNNUE = false;
