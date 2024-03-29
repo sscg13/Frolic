@@ -1580,7 +1580,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       }*/
       r = min(depth - 1, lmr_reductions[depth][i]);
     }
-    r = max(0, r - isPV - movescore[ply][i] / 12000);
+    r = max(0, r - isPV - improving - movescore[ply][i] / 12000);
     int e = (movcount == 1);
     if (!stopsearch && !prune) {
       makemove(moves[ply][i], true);
