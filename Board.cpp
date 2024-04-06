@@ -1852,6 +1852,9 @@ void autoplay(int nodes) {
     } else if ((position >> 1) >= 140) {
       finished = true;
       result = "0.5";
+    } else if (gamelength >= 900) {
+      finished = true;
+      result = "0.5";
     }
     if (useNNUE && bestmove > 0) {
       forwardaccumulators(bestmove);
@@ -2209,7 +2212,7 @@ void xboard() {
   getline(cin, xcommand);
   if (xcommand.substr(0, 8) == "protover") {
     cout << "feature ping=1 setboard=1 analyze=0 sigint=0 sigterm=0 "
-            "myname=\"sscg13 engine\" variants=\"shatranj\" done=1\n";
+            "myname=\"Prolix\" variants=\"shatranj\"\nfeature done=1\n";
   }
   if (xcommand == "new") {
     initializett();
@@ -2324,7 +2327,7 @@ int main() {
   srand(time(0));
   getline(cin, proto);
   if (proto == "uci") {
-    cout << "id name sscg13 chess engine \n"
+    cout << "id name Prolix \n"
          << "id author sscg13 \n"
          << "option name UCI_Variant type combo default shatranj var shatranj "
             "\n";
