@@ -125,6 +125,12 @@ struct TTentry {
 };
 int TTsize = 1349651;
 TTentry TT[1349651];
+struct abinfo {
+    int hashmove;
+    int eval;
+    bool incheck;
+};
+abinfo searchstack[64];
 U64 shift_w(U64 bitboard) {
     return (bitboard & ~FileA) >> 1;
 }
@@ -1427,6 +1433,14 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     int ttage = max(gamelength-TT[index].age, 0);
     bool update = (depth >= (ttdepth-ttage/3));
     bool isPV = (beta-alpha > 1);
+    int staticeval = evaluate(color);
+    bool incheck = (checkers(color) != 0ULL);
+    searchstack[ply].incheck = incheck;
+    searchstack[ply].eval = staticeval;
+    bool improving = false;
+    if (ply > 1) {
+        improving = (staticeval > searchstack[ply-2].eval);
+    }
     if (TT[index].key == zobristhash) {
         score = TT[index].score;
         ttmove = TT[index].hashmove;
@@ -1446,14 +1460,14 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
         }
         else {
             int margin = 40+60*(depth-ttdepth);
-            if ((nodetype&1) && (score-margin >= beta) && (abs(beta) < 27000) && checkers(color) == 0ULL) {
+            if ((nodetype&1) && (score-margin >= beta) && (abs(beta) < 27000) && !incheck && (ply > 0)) {
                 return (score+beta)/2;
             }
         }
     }
-    int margin = 40+60*depth;
+    int margin = 40+60*(depth);
     if (ply > 0 && score == -30000) {
-        if (evaluate(color)-margin >= beta && (abs(beta) < 27000) && checkers(color) == 0ULL) {
+        if (evaluate(color)-margin >= beta && (abs(beta) < 27000) && !incheck) {
             return (evaluate(color)+beta)/2;
         }
     }
@@ -1466,7 +1480,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
             return 0;
         }
     }
-    if ((checkers(color) == 0ULL && gamephase[color] > 0) && (depth > 1 && nmp) && (evaluate(color) > beta)) {
+    if ((!incheck && gamephase[color] > 0) && (depth > 1 && nmp) && (evaluate(color) > beta)) {
         makenullmove();
         score = -alphabeta(depth-1-(depth+1)/3, ply+1, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
@@ -1815,11 +1829,11 @@ void uci() {
         }
         int color = position&1;
         if (color == 0) {
-            iterative(1000000000, wtime/40+winc/3, max(wtime/2, wtime/10+winc), 0);
+            iterative(1000000000, wtime/40+winc/3, min(wtime/2, wtime/10+winc), 0);
 
         }
         else {
-            iterative(1000000000, btime/40+binc/3, max(btime/2, btime/10+binc), 1);
+            iterative(1000000000, btime/40+binc/3, min(btime/2, btime/10+binc), 1);
         }
     }
     if (ucicommand.substr(0, 11) == "go movetime") {
