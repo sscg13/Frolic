@@ -1522,6 +1522,9 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
             makemove(moves[ply][i], true);
             if (nullwindow) {
                 score = -alphabeta(depth-1-r, ply+1, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
+                if (score > alpha && r > 0) {
+                    score = -alphabeta(depth-1, ply+1, -alpha-1, -alpha, color^1, true, nodelimit, timelimit);
+                }
                 if (score > alpha && score < beta) {
                     score = -alphabeta(depth-1, ply+1, -beta, -alpha, color^1, true, nodelimit, timelimit);
                 }
