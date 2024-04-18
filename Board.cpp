@@ -1342,7 +1342,7 @@ bool see_exceeds(int move, int color, int threshold) {
   U64 ferzes = FerzAttacks[target] & Bitboards[4];
   U64 knights = KnightAttacks[target] & Bitboards[5];
   U64 kings = KingAttacks[target] & Bitboards[7];
-  occupied ^= (enemy & Bitboards[7]);
+  occupied ^= (enemy & Bitboards[6]);
   pieces[0][0] = popcount((PawnAttacks[color][target] & Bitboards[2] & enemy));
   pieces[0][1] = popcount(alfils & enemy);
   pieces[0][2] = popcount(ferzes & enemy);
@@ -1351,7 +1351,7 @@ bool see_exceeds(int move, int color, int threshold) {
       (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
       Bitboards[6] & enemy);
   pieces[0][5] = popcount(kings & enemy);
-  occupied ^= (Bitboards[7]);
+  occupied ^= (Bitboards[6]);
   pieces[1][0] = popcount((PawnAttacks[color ^ 1][target] & Bitboards[2] & us));
   pieces[1][1] = popcount(alfils & us);
   pieces[1][2] = popcount(ferzes & us);
@@ -1786,7 +1786,8 @@ void autoplay(int nodes) {
   initializeboard();
   string game = "";
   string result = "";
-  for (int i = 0; i < 8; i++) {
+  int extra = (rand() >> 11)&1;
+  for (int i = 0; i < 8+extra; i++) {
     int num_moves = generatemoves(i & 1, 0, 0);
     if (num_moves == 0) {
       suppressoutput = false;
@@ -1823,6 +1824,9 @@ void autoplay(int nodes) {
       scores[max] = score * (1 - 2 * color);
       max++;
     }
+    /*if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) && (checkers(color) == 0ULL) && (abs(score) < 200) && (abs(score) > 100)) {
+      bookoutput << getFEN() << "\n";
+    }*/
     if (bestmove == 0) {
       cout << "Null best move? mitigating by using proper null move \n";
       makenullmove();
