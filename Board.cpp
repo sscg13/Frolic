@@ -1591,6 +1591,10 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       if (nullwindow) {
         score = -alphabeta(depth - 1 - r, ply + 1, -alpha - 1, -alpha,
                            color ^ 1, true, nodelimit, timelimit);
+        if (score > alpha && r > 0) {
+          score = -alphabeta(depth - 1, ply + 1, -alpha - 1, -alpha, color ^ 1,
+                             true, nodelimit, timelimit);
+        }
         if (score > alpha && score < beta) {
           score = -alphabeta(depth - 1, ply + 1, -beta, -alpha, color ^ 1, true,
                              nodelimit, timelimit);
@@ -1786,8 +1790,8 @@ void autoplay(int nodes) {
   initializeboard();
   string game = "";
   string result = "";
-  int extra = (rand() >> 11)&1;
-  for (int i = 0; i < 8+extra; i++) {
+  int extra = (rand() >> 11) & 1;
+  for (int i = 0; i < 8 + extra; i++) {
     int num_moves = generatemoves(i & 1, 0, 0);
     if (num_moves == 0) {
       suppressoutput = false;
@@ -1824,8 +1828,9 @@ void autoplay(int nodes) {
       scores[max] = score * (1 - 2 * color);
       max++;
     }
-    /*if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) && (checkers(color) == 0ULL) && (abs(score) < 200) && (abs(score) > 100)) {
-      bookoutput << getFEN() << "\n";
+    /*if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) && (checkers(color) ==
+    0ULL) && (abs(score) < 200) && (abs(score) > 100)) { bookoutput << getFEN()
+    << "\n";
     }*/
     if (bestmove == 0) {
       cout << "Null best move? mitigating by using proper null move \n";
