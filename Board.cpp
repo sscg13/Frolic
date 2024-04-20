@@ -86,8 +86,8 @@ bool useNNUE = false;
 const int nnuesize = 512;
 short int nnuelayer1[768][nnuesize];
 short int layer1bias[nnuesize];
-short int ourlayer2[nnuesize];
-short int theirlayer2[nnuesize];
+int ourlayer2[nnuesize];
+int theirlayer2[nnuesize];
 short int whitehidden[nnuesize];
 short int blackhidden[nnuesize];
 int finalbias;
@@ -144,7 +144,7 @@ struct abinfo {
     bool incheck;
 };
 abinfo searchstack[64];
-short int screlu(short int x) {
+int screlu(short int x) {
     return pow(max(min((int)x, 255), 0), 2);
 }
 U64 shift_w(U64 bitboard) {
@@ -1406,13 +1406,13 @@ void readnnuefile(string file) {
         char *weights = new char[2];
         nnueweights.read(weights, 2);
         short int weight = 256*(short int)(weights[1])+(short int)(unsigned char)(weights[0]);
-        theirlayer2[i] = weight;
+        theirlayer2[i] = (int)weight;
         delete[] weights;
     }
     char *bases = new char[2];
     nnueweights.read(bases, 2);
     short int base = 256*(short int)(bases[1])+(short int)(unsigned char)(bases[0]);
-    finalbias = base;
+    finalbias = (int)base;
     delete[] bases;
     nnueweights.close();
 }
