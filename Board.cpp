@@ -1231,6 +1231,18 @@ void readnnuefile(string file) {
   delete[] bases;
   nnueweights.close();
 }
+void activatepiece(int color, int piece, int square) {
+    for (int i = 0; i < nnuesize; i++) {
+        whitehidden[i] += nnuelayer1[64*(6*color+piece)+square][i];
+        blackhidden[i] += nnuelayer1[64*(6*(color^1)+piece)+56^square][i];
+    }
+}
+void deactivatepiece(int color, int piece, int square) {
+    for (int i = 0; i < nnuesize; i++) {
+        whitehidden[i] -= nnuelayer1[64*(6*color+piece)+square][i];
+        blackhidden[i] -= nnuelayer1[64*(6*(color^1)+piece)+56^square][i];
+    }
+}
 void initializennue() {
   for (int i = 0; i < nnuesize; i++) {
     whitehidden[i] = layer1bias[i];
@@ -1241,10 +1253,7 @@ void initializennue() {
     int piececount = popcount(pieces);
     for (int j = 0; j < piececount; j++) {
       int square = popcount((pieces & -pieces) - 1);
-      for (int k = 0; k < nnuesize; k++) {
-        whitehidden[k] += nnuelayer1[64 * i + square][k];
-        blackhidden[k] += nnuelayer1[64 * ((i + 6) % 12) + 56 ^ square][k];
-      }
+      activatepiece(i/6, i%6, square);
       pieces ^= (1ULL << square);
     }
   }
@@ -1257,19 +1266,11 @@ void forwardaccumulators(int notation) {
   int captured = (notation >> 17) & 7;
   int promoted = (notation >> 21) & 3;
   int piece2 = (promoted > 0) ? piece : piece - 2;
-  for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] += nnuelayer1[64 * (6 * color + piece2) + to][i];
-    whitehidden[i] -= nnuelayer1[64 * (6 * color + piece - 2) + from][i];
-    blackhidden[i] += nnuelayer1[64 * (6 * (color ^ 1) + piece2) + 56 ^ to][i];
-    blackhidden[i] -=
-        nnuelayer1[64 * (6 * (color ^ 1) + piece - 2) + 56 ^ from][i];
+    activatepiece(color, piece2, to);
+    deactivatepiece(color, piece-2, from);
     if (captured > 0) {
-      whitehidden[i] -=
-          nnuelayer1[64 * (6 * (color ^ 1) + captured - 2) + to][i];
-      blackhidden[i] -=
-          nnuelayer1[64 * (6 * color + captured - 2) + 56 ^ to][i];
+      deactivatepiece(color^1, captured-2, to);
     }
-  }
 }
 void backwardaccumulators(int notation) {
   int from = notation & 63;
@@ -1279,19 +1280,11 @@ void backwardaccumulators(int notation) {
   int captured = (notation >> 17) & 7;
   int promoted = (notation >> 21) & 3;
   int piece2 = promoted ? piece : piece - 2;
-  for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] -= nnuelayer1[64 * (6 * color + piece2) + to][i];
-    whitehidden[i] += nnuelayer1[64 * (6 * color + piece - 2) + from][i];
-    blackhidden[i] -= nnuelayer1[64 * (6 * (color ^ 1) + piece2) + 56 ^ to][i];
-    blackhidden[i] +=
-        nnuelayer1[64 * (6 * (color ^ 1) + piece - 2) + 56 ^ from][i];
+    deactivatepiece(color, piece2, to);
+    activatepiece(color, piece-2, from);
     if (captured > 0) {
-      whitehidden[i] +=
-          nnuelayer1[64 * (6 * (color ^ 1) + captured - 2) + to][i];
-      blackhidden[i] +=
-          nnuelayer1[64 * (6 * color + captured - 2) + 56 ^ to][i];
+      activatepiece(color^1, captured-2, to);
     }
-  }
 }
 int evalnnue(int color) {
   int eval = finalbias;
