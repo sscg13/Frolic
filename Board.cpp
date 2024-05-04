@@ -1926,7 +1926,7 @@ void uci() {
   string ucicommand;
   getline(cin, ucicommand);
   if (ucicommand == "uci") {
-    cout << "id name sscg13 chess engine \n"
+    cout << "id name Prolix \n"
          << "id author sscg13 \n"
          << "uciok\n";
   }
@@ -2204,13 +2204,26 @@ void uci() {
     string mov = ucicommand.substr(4, ucicommand.length() - 4);
     int color = position & 1;
     int movcount = generatemoves(color, 0, 0);
-    int move = 0;
+    int internal = 0;
     for (int i = 0; i < movcount; i++) {
       if (algebraic(moves[0][i]) == mov) {
-        move = moves[0][i];
+        internal = moves[0][i];
       }
     }
-    cout << algebraic(move) << " " << see_exceeds(move, color, 0) << "\n";
+    cout << algebraic(internal) << " " << see_exceeds(internal, color, 0)
+         << "\n";
+  }
+  if (ucicommand == "history") {
+    int color = position & 1;
+    int movcount = generatemoves(color, 0, 0);
+    cout << "History values:\n";
+    for (int i = 0; i < movcount; i++) {
+      int internal = moves[0][i];
+      cout
+          << algebraic(internal) << ": "
+          << historytable[color][(internal >> 13) & 7 - 2][(internal >> 6) & 63]
+          << "\n";
+    }
   }
 }
 void xboard() {
