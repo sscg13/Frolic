@@ -1610,7 +1610,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
             if (update && !stopsearch && abs(score) < 29000) {
               updatett(index, depth, score, 1, moves[ply][i]);
             }
-            if (((moves[ply][i] & 1) == 0) &&
+            if (!iscapture(moves[ply][i]) &&
                 (killers[ply][0] != moves[ply][i])) {
               killers[ply][1] = killers[ply][0];
               killers[ply][0] = moves[ply][i];
