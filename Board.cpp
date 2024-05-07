@@ -323,8 +323,8 @@ void updatett(int index, int depth, int score, int nodetype, int hashmove) {
 void resethistory() {
     for (int i = 0; i < 6; i++) {
         for (int j = 0; j < 64; j++) {
-            historytable[0][i][j] = 0;
-            historytable[1][i][j] = 0;
+            historytable[0][i][j] /= 2;
+            historytable[1][i][j] /= 2;
         }
     }
 }
@@ -1628,11 +1628,9 @@ int quiesce(int alpha, int beta, int color, int depth) {
         }
         movcount = generatemoves(color, 1, maxdepth+depth);
     }
-    if (depth < 2) {
+    if (depth < 4) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
-            int temp1 = 0;
-            int temp2 = 0;
             while (j > 0 && movescore[maxdepth+depth][j] > movescore[maxdepth+depth][j-1]) {
                 swap(moves[maxdepth+depth][j], moves[maxdepth+depth][j-1]);
                 swap(movescore[maxdepth+depth][j], movescore[maxdepth+depth][j-1]);
@@ -1714,6 +1712,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
                 return (score+beta)/2;
             }
         }
+        staticeval = score;
     }
     int margin = 40+60*(depth);
     if (ply > 0 && score == -30000) {
@@ -1732,17 +1731,15 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     }
     if ((!incheck && gamephase[color] > 0) && (depth > 1 && nmp) && (staticeval > beta)) {
         makenullmove();
-        score = -alphabeta(depth-1-(depth+1)/3, ply+1, -beta, 1-beta, color^1, false, nodelimit, timelimit);
+        score = -alphabeta(depth-2-depth/3, ply+1, -beta, 1-beta, color^1, false, nodelimit, timelimit);
         unmakenullmove();
         if (score >= beta) {
             return beta;
         }
     }
-    if (depth > 1) {
+    if (depth > 0) {
         for (int i = 0; i < movcount; i++) {
             int j = i;
-            int temp1 = 0;
-            int temp2 = 0;
             if (moves[ply][i] == ttmove) {
                 movescore[ply][i] = (1 << 20);
             }
@@ -1761,11 +1758,8 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
     }
     for (int i = 0; i < movcount; i++) {
         bool nullwindow = (i > 0);
-        int r = ((movescore[ply][i] < 10000) && depth > 1) ? min(depth-1, lmr_reductions[depth][i]) : 0;
-        if (checkers(color) != 0ULL || beta-alpha > 1) {
-            r--;
-        }
-        r = max(0, r);
+        int r = (movescore[ply][i] < 30000) ? min(depth-1, lmr_reductions[depth][i]) : 0;
+        r = max(0, r - (incheck || isPV) - movescore[ply][i]/16384);
         int e = (movcount == 1) ? 1 : 0;
         //bool prune = ((beta-alpha < 2) && (depth < 5) && (i > 6+4*depth) && movescore[depth][i] < 1000);
         if (!stopsearch) {
