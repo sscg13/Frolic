@@ -323,8 +323,8 @@ void updatett(int index, int depth, int score, int nodetype, int hashmove) {
 void resethistory() {
     for (int i = 0; i < 6; i++) {
         for (int j = 0; j < 64; j++) {
-            historytable[0][i][j] /= 2;
-            historytable[1][i][j] /= 2;
+            historytable[0][i][j] = 0;
+            historytable[1][i][j] = 0;
         }
     }
 }
@@ -1795,7 +1795,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp, int 
                         if (update && !stopsearch && abs(score) < 29000) {
                             updatett(index, depth, score, 1, moves[ply][i]);
                         }
-                        if (((moves[ply][i]&1) == 0) && (killers[ply][0] != moves[ply][i])) {
+                        if ((((moves[ply][i]>>16)&1) == 0) && (killers[ply][0] != moves[ply][i])) {
                             killers[ply][1] = killers[ply][0];
                             killers[ply][0] = moves[ply][i];
                         }
