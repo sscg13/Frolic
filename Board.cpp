@@ -161,6 +161,7 @@ int rookmobe[15] = {-40, -32, -22, -15, -9, -5, -1, 3,
 int kingmobe[9] = {-61, -38, -15, -6, 3, 13, 22, 28, 33};
 int lmr_reductions[32][256];
 int historytable[2][6][64];
+int capthist[2][6][6];
 int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0};
 int phase[6] = {0, 1, 2, 4, 6, 0};
 int gamephase[2] = {0, 0};
@@ -313,6 +314,10 @@ void resethistory() {
       historytable[0][i][j] = 0;
       historytable[1][i][j] = 0;
       countermoves[i][j] = 0;
+    }
+    for (int j = 0; j < 6; j++) {
+      capthist[0][i][j] = 0;
+      capthist[1][i][j] = 0;
     }
   }
 }
@@ -601,7 +606,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
     notation |= (captured << 17);
     moves[depth][movecount] = notation;
     movescore[depth][movecount] =
-        3000 + 10000 * captured + historytable[color][5][capturesquare];
+        3000 + 10000 * captured + capthist[color][5][captured - 2];
     movecount++;
     ourcaptures ^= (1ULL << capturesquare);
   }
@@ -670,12 +675,12 @@ int generatemoves(int color, bool capturesonly, int depth) {
           ((color == 1) && (capturesquare & 56) == 0)) {
         moves[depth][movecount] = notation | (3 << 20);
         movescore[depth][movecount] =
-            (2 + captured) * 10000 + historytable[color][0][capturesquare];
+            (2 + captured) * 10000 + capthist[color][0][captured - 2];
         movecount++;
       } else {
         moves[depth][movecount] = notation;
         movescore[depth][movecount] =
-            8000 + captured * 10000 + historytable[color][0][capturesquare];
+            8000 + captured * 10000 + capthist[color][0][captured - 2];
         movecount++;
       }
       ourcaptures ^= (1ULL << capturesquare);
@@ -734,7 +739,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
       notation |= (captured << 17);
       moves[depth][movecount] = notation;
       movescore[depth][movecount] =
-          7000 + captured * 10000 + historytable[color][1][capturesquare];
+          7000 + captured * 10000 + capthist[color][1][captured - 2];
       movecount++;
       ourcaptures ^= (1ULL << capturesquare);
     }
@@ -783,7 +788,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
       notation |= (captured << 17);
       moves[depth][movecount] = notation;
       movescore[depth][movecount] =
-          6000 + captured * 10000 + historytable[color][2][capturesquare];
+          6000 + captured * 10000 + capthist[color][2][captured - 2];
       movecount++;
       ourcaptures ^= (1ULL << capturesquare);
     }
@@ -832,7 +837,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
       notation |= (captured << 17);
       moves[depth][movecount] = notation;
       movescore[depth][movecount] =
-          5000 + captured * 10000 + historytable[color][3][capturesquare];
+          5000 + captured * 10000 + capthist[color][3][captured - 2];
       movecount++;
       ourcaptures ^= (1ULL << capturesquare);
     }
@@ -887,7 +892,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
       notation |= (captured << 17);
       moves[depth][movecount] = notation;
       movescore[depth][movecount] =
-          4000 + captured * 10000 + historytable[color][4][capturesquare];
+          4000 + captured * 10000 + capthist[color][4][captured - 2];
       movecount++;
       ourcaptures ^= (1ULL << capturesquare);
     }
@@ -1617,16 +1622,27 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
             }
             int target = (moves[ply][i] >> 6) & 63;
             int piece = (moves[ply][i] >> 13) & 7;
-            historytable[color][piece - 2][target] +=
-                (depth * depth * depth -
-                 (depth * depth * depth *
-                  historytable[color][piece - 2][target]) /
-                     27000);
-            for (int j = 0; j < i; j++) {
-              historytable[color][((moves[ply][j] >> 13) & 7) - 2]
-                          [(moves[ply][j] >> 6) & 63] -= (depth * 3);
+            int captured = (moves[ply][i] >> 17) & 7;
+            if (captured > 0) {
+              capthist[color][piece - 2][captured - 2] +=
+                  (depth * depth * depth -
+                   (depth * depth * depth *
+                    capthist[color][piece - 2][captured - 2]) /
+                       27000);
+            } else {
+              historytable[color][piece - 2][target] +=
+                  (depth * depth * depth -
+                   (depth * depth * depth *
+                    historytable[color][piece - 2][target]) /
+                       27000);
             }
-            if (ply > 0 && nmp) {
+            for (int j = 0; j < i; j++) {
+              if (!iscapture(moves[ply][j])) {
+                historytable[color][((moves[ply][j] >> 13) & 7) - 2]
+                            [(moves[ply][j] >> 6) & 63] -= (depth * 3);
+              }
+            }
+            if (ply > 0 && nmp && !iscapture(moves[ply][i])) {
               countermoves[previouspiece - 2][previoussquare] =
                   (moves[ply][i] & 4095);
             }
