@@ -2350,7 +2350,7 @@ void xboard() {
     gosent = true;
   }
 }
-int main() {
+int main(int argc, char *argv[]) {
   initializeleaperattacks();
   initializemasks();
   initializerankattacks();
@@ -2360,6 +2360,42 @@ int main() {
   initializett();
   resethistory();
   srand(time(0));
+  if (argc > 1) {
+    string benchfens[14] = {
+        "r5r1/1k6/1pqb4/1Bppn1p1/P1n1p2p/P1N1P2P/2KQ1p2/1RBR2N1 w - - 0 45",
+        "8/1R6/4q3/3Nk1p1/2P3p1/3PK3/8/8 w - - 2 83",
+        "8/8/8/1KQQQ3/2P3qP/5k2/7b/8 b - - 20 76",
+        "2r1r3/p1pk1ppp/bpnpp2b/8/3P4/BPQ1PN1P/P1P1KPP1/R6R b - - 1 14",
+        "3kq3/3p4/3p1p2/6pK/1R1Q4/1P1B1r2/8/8 w - - 2 44",
+        "1nbkq3/1rpppr1p/3b1p2/p1PP1Pp1/1p6/PP1NP1PB/3Q3n/RNBKR3 w - - 0 20",
+        "r4br1/8/p2k2qp/7n/1R1N4/3BB1P1/P2PPQ1P/3K4 w - - 3 32",
+        "8/8/8/8/3Qk1n1/2K1P3/8/8 b - - 46 162",
+        "rnbkqbnr/ppppp1p1/5p1p/8/8/3P2P1/PPP1PP1P/RNBKQBNR w - - 0 1",
+        "5b1r/8/1p1pq1p1/p1k3P1/5RP1/P1PB4/4KQ2/8 w - - 1 44",
+        "2r1qr2/8/1pkp2pb/p2pn1N1/3R2PP/3BP1Q1/P1P1R3/2K5 b - - 6 30",
+        "1r2q3/R4pn1/1p1pkn2/3p1p2/1PpP2p1/N1P1K1P1/3Q3P/2B1R3 b - - 5 31",
+        "8/1Q6/3Q4/3p1p2/2pkq2R/5q2/5K2/8 w - - 2 116",
+        "8/4k3/4R3/2PK4/1P3Nn1/P2PPn2/5r2/8 b - - 2 58"};
+    suppressoutput = true;
+    maxdepth = 14;
+    auto commence = chrono::steady_clock::now();
+    int nodes = 0;
+    for (int i = 0; i < 14; i++) {
+      initializett();
+      initializeboard();
+      parseFEN(benchfens[i]);
+      int color = position & 1;
+      iterative(1000000000, 120000, 120000, color);
+      nodes += nodecount;
+    }
+    auto conclude = chrono::steady_clock::now();
+    int timetaken =
+        chrono::duration_cast<chrono::milliseconds>(conclude - commence)
+            .count();
+    int nps = 1000 * (nodes / timetaken);
+    cout << nodes << " nodes " << nps << " nps\n";
+    return 0;
+  }
   getline(cin, proto);
   if (proto == "uci") {
     cout << "id name Prolix \n"
