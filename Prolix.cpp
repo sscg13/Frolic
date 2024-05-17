@@ -177,8 +177,8 @@ struct TTentry {
   int nodetype;
   int hashmove;
 };
-int TTsize = 1349651;
-TTentry TT[1349651];
+int TTsize = 1048576;
+vector<TTentry> TT(TTsize);
 struct abinfo {
   int playedmove;
   int eval;
@@ -1942,9 +1942,14 @@ void uci() {
   string ucicommand;
   getline(cin, ucicommand);
   if (ucicommand == "uci") {
-    cout << "id name Prolix \n"
-         << "id author sscg13 \n"
-         << "uciok\n";
+    cout
+        << "id name Prolix \n"
+        << "id author sscg13 \n"
+        << "option name UCI_Variant type combo default shatranj var shatranj \n"
+        << "option name Threads type spin default 1 min 1 max 1 \n"
+        << "option name Hash type spin default 32 min 1 max 1024 \n"
+        << "option name EvalFile type string default <empty> \n"
+        << "uciok\n";
   }
   if (ucicommand == "quit") {
     exit(0);
@@ -2205,15 +2210,39 @@ void uci() {
     bookoutput.close();
     cout << "Generation done \n";
   }
-  if (ucicommand.substr(0, 23) == "setoption name EvalFile") {
-    string nnuefile = ucicommand.substr(30, ucicommand.length() - 30);
-    if (nnuefile != "<empty>") {
-      readnnuefile(nnuefile);
-      useNNUE = true;
-      initializennue();
-      cout << "info string using nnue file " << nnuefile << "\n";
-    } else {
-      useNNUE = false;
+  if (ucicommand.substr(0, 14) == "setoption name") {
+    int reader = 15;
+    string option = "";
+    while (ucicommand[reader] != ' ') {
+      option += ucicommand[reader];
+      reader++;
+    }
+    if (option == "Hash") {
+      reader = ucicommand.length() - 1;
+      int sum = 0;
+      int add = 1;
+      while (ucicommand[reader] != ' ') {
+        sum += ((int)(ucicommand[reader] - 48)) * add;
+        add *= 10;
+        reader--;
+      }
+      if (sum <= 1024) {
+        int oldTTsize = TTsize;
+        TTsize = 32768 * sum;
+        TT.resize(TTsize);
+        TT.shrink_to_fit();
+      }
+    }
+    if (option == "EvalFile") {
+      string nnuefile = ucicommand.substr(30, ucicommand.length() - 30);
+      if (nnuefile != "<empty>") {
+        readnnuefile(nnuefile);
+        useNNUE = true;
+        initializennue();
+        cout << "info string using nnue file " << nnuefile << "\n";
+      } else {
+        useNNUE = false;
+      }
     }
   }
   if (ucicommand.substr(0, 3) == "see") {
@@ -2398,12 +2427,14 @@ int main(int argc, char *argv[]) {
   }
   getline(cin, proto);
   if (proto == "uci") {
-    cout << "id name Prolix \n"
-         << "id author sscg13 \n"
-         << "option name UCI_Variant type combo default shatranj var shatranj "
-            "\n";
-    cout << "option name EvalFile type string default <empty> \n"
-         << "uciok\n";
+    cout
+        << "id name Prolix \n"
+        << "id author sscg13 \n"
+        << "option name UCI_Variant type combo default shatranj var shatranj \n"
+        << "option name Threads type spin default 1 min 1 max 1 \n"
+        << "option name Hash type spin default 32 min 1 max 1024 \n"
+        << "option name EvalFile type string default <empty> \n"
+        << "uciok\n";
     while (true) {
       uci();
     }
