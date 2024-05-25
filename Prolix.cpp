@@ -163,7 +163,8 @@ int lmr_reductions[32][256];
 int historytable[2][6][64];
 int capthist[2][6][6];
 int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0};
-int phase[6] = {0, 1, 2, 4, 6, 0};
+int phase[6] = {1, 1, 2, 4, 6, 0};
+int totalphase = 64;
 int gamephase[2] = {0, 0};
 ofstream bookoutput;
 ifstream datainput;
@@ -340,6 +341,8 @@ void initializeboard() {
        materiale[2]);
   int startpstm = 0;
   int startpste = 0;
+  int startphase =
+      (8 * phase[0] + 2 * (phase[1] + phase[3] + phase[4]) + phase[2]);
   for (int i = 0; i < 16; i++) {
     startpstm += pstm[startpiece[i]][i];
     startpste += pste[startpiece[i]][i];
@@ -352,8 +355,8 @@ void initializeboard() {
   evalm[1] = startmatm + startpstm;
   evale[0] = startmate + startpste;
   evale[1] = startmate + startpste;
-  gamephase[0] = 24;
-  gamephase[1] = 24;
+  gamephase[0] = startphase;
+  gamephase[1] = startphase;
   gamelength = 0;
   zobrist[0] = scratchzobrist();
 }
@@ -466,7 +469,7 @@ void makemove(int notation, bool reversible) {
     evale[color] -= (materiale[0] + pste[0][(56 * color) ^ from]);
     evale[color] +=
         (materiale[promoted + 1] + pste[promoted + 1][(56 * color) ^ to]);
-    gamephase[color] += phase[promoted + 1];
+    gamephase[color] += (phase[promoted + 1] - phase[0]);
   } else if (notation & (1 << 24)) {
     position ^= ((from + to) << 7);
   }
@@ -511,7 +514,7 @@ void unmakemove(int notation) {
     evale[color] += (materiale[0] + pste[0][(56 * color) ^ from]);
     evale[color] -=
         (materiale[promoted + 1] + pste[promoted + 1][(56 * color) ^ to]);
-    gamephase[color] -= phase[promoted + 1];
+    gamephase[color] -= (phase[promoted + 1] - phase[0]);
   }
 }
 int generatemoves(int color, bool capturesonly, int depth) {
@@ -1313,14 +1316,14 @@ int evalnnue(int color) {
   return eval;
 }
 int evaluate(int color) {
-  int midphase = min(48, gamephase[0] + gamephase[1]);
-  int endphase = 48 - midphase;
+  int midphase = min(totalphase, gamephase[0] + gamephase[1]);
+  int endphase = totalphase - midphase;
   int mideval =
       evalm[color] + mobilitym[color] - evalm[color ^ 1] - mobilitym[color ^ 1];
   int endeval =
       evale[color] + mobilitye[color] - evale[color ^ 1] - mobilitye[color ^ 1];
   int progress = 200 - (position >> 1);
-  int base = (mideval * midphase + endeval * endphase) / 48 + 10;
+  int base = (mideval * midphase + endeval * endphase) / totalphase + 10;
   return (base * progress) / 200;
 }
 bool see_exceeds(int move, int color, int threshold) {
