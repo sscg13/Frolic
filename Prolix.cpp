@@ -79,6 +79,7 @@ bool suppressoutput = false;
 int movecount;
 auto start = chrono::steady_clock::now();
 bool useNNUE = false;
+bool showWDL = false;
 #define nnuesize 64
 short int nnuelayer1[768][nnuesize];
 short int layer1bias[nnuesize];
@@ -1676,6 +1677,26 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   }
   return bestscore;
 }
+int wdlmodel(int eval) {
+  int material = popcount(Bitboards[2]) + popcount(Bitboards[3]) +
+                 2 * popcount(Bitboards[4]) + 4 * popcount(Bitboards[5]) +
+                 6 * popcount(Bitboards[6]);
+  double m = max(min(material, 64), 4) / 32.0;
+  double as[4] = {12.86611189, -1.56947052, -105.75177291, 247.30758159};
+  double bs[4] = {-7.31901285, 36.79299424, -14.98330140, 64.14426025};
+  double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
+  double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
+  return int(0.5 + 1000 / (1 + exp((a - double(eval)) / b)));
+}
+int normalize(int eval) {
+  int material = popcount(Bitboards[2]) + popcount(Bitboards[3]) +
+                 2 * popcount(Bitboards[4]) + 4 * popcount(Bitboards[5]) +
+                 6 * popcount(Bitboards[6]);
+  double m = max(min(material, 64), 4) / 32.0;
+  double as[4] = {12.86611189, -1.56947052, -105.75177291, 247.30758159};
+  double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
+  return round(100 * eval / a);
+}
 int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
   nodecount = 0;
   stopsearch = false;
@@ -1739,8 +1760,16 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
       }
       if (proto == "uci" && !suppressoutput) {
         if (abs(score) <= 27000) {
+          int normalscore = normalize(score);
           cout << "info depth " << depth << " nodes " << nodecount << " time "
-               << timetaken.count() << " score cp " << score << " pv ";
+               << timetaken.count() << " score cp " << normalscore;
+          if (showWDL) {
+            int winrate = wdlmodel(score);
+            int lossrate = wdlmodel(-score);
+            int drawrate = 1000 - winrate - lossrate;
+            cout << " wdl " << winrate << " " << drawrate << " " << lossrate;
+          }
+          cout << " pv ";
           for (int i = 0; i < last; i++) {
             cout << algebraic(pvtable[i]) << " ";
           }
@@ -1753,7 +1782,13 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
             matescore = (-28000 - score) / 2;
           }
           cout << "info depth " << depth << " nodes " << nodecount << " time "
-               << timetaken.count() << " score mate " << matescore << " pv ";
+               << timetaken.count() << " score mate " << matescore;
+          if (showWDL) {
+            int winrate = 1000 * (matescore > 0);
+            int lossrate = 1000 * (matescore < 0);
+            cout << " wdl " << winrate << " 0 " << lossrate;
+          }
+          cout << " pv ";
           for (int i = 0; i < last; i++) {
             cout << algebraic(pvtable[i]) << " ";
           }
@@ -1796,7 +1831,7 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
   bestmove = bestmove1;
   return returnedscore;
 }
-void autoplay(int nodes) {
+void autoplay() {
   suppressoutput = true;
   initializett();
   resethistory();
@@ -1804,7 +1839,7 @@ void autoplay(int nodes) {
   string game = "";
   string result = "";
   int extra = (rand() >> 11) & 1;
-  for (int i = 0; i < 8 + extra; i++) {
+  for (int i = 0; i < 7 + extra; i++) {
     int num_moves = generatemoves(i & 1, 0, 0);
     if (num_moves == 0) {
       suppressoutput = false;
@@ -1834,7 +1869,7 @@ void autoplay(int nodes) {
   bool finished = false;
   while (!finished) {
     int color = position & 1;
-    int score = iterative(nodes, 120000, 120000, color);
+    int score = iterative(65536, 50, 50, color);
     if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) &&
         (checkers(color) == 0ULL) && (abs(score) < 27000)) {
       fens[max] = getFEN();
@@ -2204,7 +2239,7 @@ void uci() {
       reader--;
     }
     for (int i = 0; i < sum; i++) {
-      autoplay(10000);
+      autoplay();
       cout << i << "\n";
     }
     bookoutput.close();
@@ -2243,6 +2278,9 @@ void uci() {
       } else {
         useNNUE = false;
       }
+    }
+    if (option == "UCI_ShowWDL") {
+      showWDL = true;
     }
   }
   if (ucicommand.substr(0, 3) == "see") {
@@ -2434,6 +2472,7 @@ int main(int argc, char *argv[]) {
         << "option name Threads type spin default 1 min 1 max 1 \n"
         << "option name Hash type spin default 32 min 1 max 1024 \n"
         << "option name EvalFile type string default <empty> \n"
+        << "option name UCI_ShowWDL type check default false \n"
         << "uciok\n";
     while (true) {
       uci();
