@@ -1,3 +1,4 @@
+#include "nnue.cpp"
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -9,16 +10,6 @@
 using U64 = uint64_t;
 using namespace std;
 
-void printbitboard(U64 bitboard) {
-  U64 other = byteswap(bitboard);
-  for (int i = 0; i < 64; i++) {
-    cout << (other % 2);
-    other = other >> 1;
-    if (i == (i | 7)) {
-      cout << endl;
-    }
-  }
-}
 U64 FileA = 0x0101010101010101;
 U64 FileB = FileA << 1;
 U64 FileC = FileA << 2;
@@ -80,17 +71,7 @@ int movecount;
 auto start = chrono::steady_clock::now();
 bool useNNUE = false;
 bool showWDL = false;
-#define nnuesize 64
-short int nnuelayer1[768][nnuesize];
-short int layer1bias[nnuesize];
-int ourlayer2[nnuesize];
-int theirlayer2[nnuesize];
-short int whitehidden[nnuesize];
-short int blackhidden[nnuesize];
-int finalbias;
-int evalscale = 400;
-int evalQA = 255;
-int evalQB = 64;
+NNUE EUNN;
 int materialm[6] = {78, 77, 144, 415, 657, 20000};
 int materiale[6] = {85, 113, 139, 402, 905, 20000};
 int pstm[6][64] = {
@@ -185,7 +166,6 @@ struct abinfo {
   int eval;
 };
 abinfo searchstack[64];
-int screlu(short int x) { return pow(max(min((int)x, 255), 0), 2); }
 U64 shift_w(U64 bitboard) { return (bitboard & ~FileA) >> 1; }
 U64 shift_n(U64 bitboard) { return bitboard << 8; }
 U64 shift_s(U64 bitboard) { return bitboard >> 8; }
@@ -1190,129 +1170,6 @@ string getFEN() {
   FEN = FEN + bruh + " 1";
   return FEN;
 }
-void readnnuefile(string file) {
-  ifstream nnueweights;
-  nnueweights.open(file, ifstream::binary);
-  for (int i = 0; i < 768; i++) {
-    int piece = i / 64;
-    int square = i % 64;
-    int convert[12] = {0, 3, 1, 4, 2, 5, 6, 9, 7, 10, 8, 11};
-    for (int j = 0; j < nnuesize; j++) {
-      char *weights = new char[2];
-      nnueweights.read(weights, 2);
-      short int weight = 256 * (short int)(weights[1]) +
-                         (short int)(unsigned char)(weights[0]);
-      nnuelayer1[64 * convert[piece] + square][j] = weight;
-      delete[] weights;
-    }
-  }
-  for (int i = 0; i < nnuesize; i++) {
-    char *biases = new char[2];
-    nnueweights.read(biases, 2);
-    short int bias =
-        256 * (short int)(biases[1]) + (short int)(unsigned char)(biases[0]);
-    layer1bias[i] = bias;
-    delete[] biases;
-  }
-  for (int i = 0; i < nnuesize; i++) {
-    char *weights = new char[2];
-    nnueweights.read(weights, 2);
-    short int weight =
-        256 * (short int)(weights[1]) + (short int)(unsigned char)(weights[0]);
-    ourlayer2[i] = (int)weight;
-    delete[] weights;
-  }
-  for (int i = 0; i < nnuesize; i++) {
-    char *weights = new char[2];
-    nnueweights.read(weights, 2);
-    short int weight =
-        256 * (short int)(weights[1]) + (short int)(unsigned char)(weights[0]);
-    theirlayer2[i] = (int)weight;
-    delete[] weights;
-  }
-  char *bases = new char[2];
-  nnueweights.read(bases, 2);
-  short int base =
-      256 * (short int)(bases[1]) + (short int)(unsigned char)(bases[0]);
-  finalbias = base;
-  delete[] bases;
-  nnueweights.close();
-}
-void activatepiece(int color, int piece, int square) {
-  for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] += nnuelayer1[64 * (6 * color + piece) + square][i];
-    blackhidden[i] +=
-        nnuelayer1[64 * (6 * (color ^ 1) + piece) + 56 ^ square][i];
-  }
-}
-void deactivatepiece(int color, int piece, int square) {
-  for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] -= nnuelayer1[64 * (6 * color + piece) + square][i];
-    blackhidden[i] -=
-        nnuelayer1[64 * (6 * (color ^ 1) + piece) + 56 ^ square][i];
-  }
-}
-void initializennue() {
-  for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] = layer1bias[i];
-    blackhidden[i] = layer1bias[i];
-  }
-  for (int i = 0; i < 12; i++) {
-    U64 pieces = (Bitboards[i / 6] & Bitboards[2 + (i % 6)]);
-    int piececount = popcount(pieces);
-    for (int j = 0; j < piececount; j++) {
-      int square = popcount((pieces & -pieces) - 1);
-      activatepiece(i / 6, i % 6, square);
-      pieces ^= (1ULL << square);
-    }
-  }
-}
-void forwardaccumulators(int notation) {
-  int from = notation & 63;
-  int to = (notation >> 6) & 63;
-  int color = (notation >> 12) & 1;
-  int piece = (notation >> 13) & 7;
-  int captured = (notation >> 17) & 7;
-  int promoted = (notation >> 21) & 3;
-  int piece2 = (promoted > 0) ? piece : piece - 2;
-  activatepiece(color, piece2, to);
-  deactivatepiece(color, piece - 2, from);
-  if (captured > 0) {
-    deactivatepiece(color ^ 1, captured - 2, to);
-  }
-}
-void backwardaccumulators(int notation) {
-  int from = notation & 63;
-  int to = (notation >> 6) & 63;
-  int color = (notation >> 12) & 1;
-  int piece = (notation >> 13) & 7;
-  int captured = (notation >> 17) & 7;
-  int promoted = (notation >> 21) & 3;
-  int piece2 = promoted ? piece : piece - 2;
-  deactivatepiece(color, piece2, to);
-  activatepiece(color, piece - 2, from);
-  if (captured > 0) {
-    activatepiece(color ^ 1, captured - 2, to);
-  }
-}
-int evalnnue(int color) {
-  int eval = finalbias * evalQA;
-  if (color == 0) {
-    for (int i = 0; i < nnuesize; i++) {
-      eval += screlu(whitehidden[i]) * ourlayer2[i];
-      eval += screlu(blackhidden[i]) * theirlayer2[i];
-    }
-  } else {
-    for (int i = 0; i < nnuesize; i++) {
-      eval += screlu(whitehidden[i]) * theirlayer2[i];
-      eval += screlu(blackhidden[i]) * ourlayer2[i];
-    }
-  }
-  eval /= evalQA;
-  eval *= evalscale;
-  eval /= (evalQA * evalQB);
-  return eval;
-}
 int evaluate(int color) {
   int midphase = min(48, gamephase[0] + gamephase[1]);
   int endphase = 48 - midphase;
@@ -1386,7 +1243,7 @@ bool see_exceeds(int move, int color, int threshold) {
   }
 }
 int quiesce(int alpha, int beta, int color, int depth) {
-  int score = useNNUE ? evalnnue(color) : evaluate(color);
+  int score = useNNUE ? EUNN.evaluate(color) : evaluate(color);
   int bestscore = -30000;
   int movcount;
   if (depth > 3) {
@@ -1430,12 +1287,12 @@ int quiesce(int alpha, int beta, int color, int depth) {
     if (good) {
       makemove(moves[maxdepth + depth][i], 1);
       if (useNNUE) {
-        forwardaccumulators(moves[maxdepth + depth][i]);
+        EUNN.forwardaccumulators(moves[maxdepth + depth][i]);
       }
       score = -quiesce(-beta, -alpha, color ^ 1, depth + 1);
       unmakemove(moves[maxdepth + depth][i]);
       if (useNNUE) {
-        backwardaccumulators(moves[maxdepth + depth][i]);
+        EUNN.backwardaccumulators(moves[maxdepth + depth][i]);
       }
       if (score >= beta) {
         return score;
@@ -1479,7 +1336,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   bool update = (depth >= (ttdepth - ttage / 3));
   bool incheck = (checkers(color) != 0ULL);
   bool isPV = (beta - alpha > 1);
-  int staticeval = useNNUE ? evalnnue(color) : evaluate(color);
+  int staticeval = useNNUE ? EUNN.evaluate(color) : evaluate(color);
   searchstack[ply].eval = staticeval;
   bool improving = false;
   if (ply > 1) {
@@ -1589,7 +1446,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       makemove(moves[ply][i], true);
       searchstack[ply].playedmove = moves[ply][i];
       if (useNNUE) {
-        forwardaccumulators(moves[ply][i]);
+        EUNN.forwardaccumulators(moves[ply][i]);
       }
       if (nullwindow) {
         score = -alphabeta(depth - 1 - r, ply + 1, -alpha - 1, -alpha,
@@ -1608,7 +1465,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       }
       unmakemove(moves[ply][i]);
       if (useNNUE) {
-        backwardaccumulators(moves[ply][i]);
+        EUNN.backwardaccumulators(moves[ply][i]);
       }
       if (score > bestscore) {
         if (score > alpha) {
@@ -1854,7 +1711,7 @@ void autoplay() {
     game += " ";
   }
   if (useNNUE) {
-    initializennue();
+    EUNN.initializennue(Bitboards);
   }
   if (generatemoves(0, 0, 0) == 0) {
     suppressoutput = false;
@@ -1914,7 +1771,7 @@ void autoplay() {
       result = "0.5";
     }
     if (useNNUE && bestmove > 0) {
-      forwardaccumulators(bestmove);
+      EUNN.forwardaccumulators(bestmove);
     }
   }
   for (int i = 0; i < max; i++) {
@@ -1995,7 +1852,7 @@ void uci() {
   if (ucicommand == "ucinewgame") {
     initializett();
     initializeboard();
-    initializennue();
+    EUNN.initializennue(Bitboards);
   }
   if (ucicommand.substr(0, 17) == "position startpos") {
     initializeboard();
@@ -2019,7 +1876,7 @@ void uci() {
         mov += ucicommand[i];
       }
     }
-    initializennue();
+    EUNN.initializennue(Bitboards);
   }
   if (ucicommand.substr(0, 12) == "position fen") {
     int reader = 13;
@@ -2048,7 +1905,7 @@ void uci() {
         mov += ucicommand[i];
       }
     }
-    initializennue();
+    EUNN.initializennue(Bitboards);
   }
   if (ucicommand.substr(0, 8) == "go wtime") {
     int wtime;
@@ -2271,9 +2128,9 @@ void uci() {
     if (option == "EvalFile") {
       string nnuefile = ucicommand.substr(30, ucicommand.length() - 30);
       if (nnuefile != "<empty>") {
-        readnnuefile(nnuefile);
+        EUNN.readnnuefile(nnuefile);
         useNNUE = true;
-        initializennue();
+        EUNN.initializennue(Bitboards);
         cout << "info string using nnue file " << nnuefile << "\n";
       } else {
         useNNUE = false;
