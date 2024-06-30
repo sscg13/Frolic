@@ -1,30 +1,31 @@
 #include <fstream>
-int screlu(short int x) { return pow(max(min((int)x, 255), 0), 2); }
-class NNUE{
-    const int nnuesize = 64;
-    short int nnuelayer1[768][nnuesize];
-    short int layer1bias[nnuesize];
-    int ourlayer2[nnuesize];
-    int theirlayer2[nnuesize];
-    short int whitehidden[nnuesize];
-    short int blackhidden[nnuesize];
-    int finalbias;
-    int evalscale = 400;
-    int evalQA = 255;
-    int evalQB = 64;
-    void readnnuefile(string file);
-    void activatepiece(int color, int piece, int square);
-    void deactivatepiece(int color, int piece, int square);
-    void initializennue();
-    void forwardaccumulators(int notation);
-    void backwardaccumulators(int notation);
-    int evaluate(int color);
+const int nnuesize = 64;
+int screlu(short int x) { return pow(std::max(std::min((int)x, 255), 0), 2); }
+class NNUE {
+  short int nnuelayer1[768][nnuesize];
+  short int layer1bias[nnuesize];
+  int ourlayer2[nnuesize];
+  int theirlayer2[nnuesize];
+  short int whitehidden[nnuesize];
+  short int blackhidden[nnuesize];
+  int finalbias;
+  int evalscale = 400;
+  int evalQA = 255;
+  int evalQB = 64;
+
+public:
+  void readnnuefile(std::string file);
+  void activatepiece(int color, int piece, int square);
+  void deactivatepiece(int color, int piece, int square);
+  void initializennue(uint64_t *Bitboards);
+  void forwardaccumulators(int notation);
+  void backwardaccumulators(int notation);
+  int evaluate(int color);
 };
 
-
-void NNUE::readnnuefile(string file) {
-  ifstream nnueweights;
-  nnueweights.open(file, ifstream::binary);
+void NNUE::readnnuefile(std::string file) {
+  std::ifstream nnueweights;
+  nnueweights.open(file, std::ifstream::binary);
   for (int i = 0; i < 768; i++) {
     int piece = i / 64;
     int square = i % 64;
@@ -84,16 +85,16 @@ void NNUE::deactivatepiece(int color, int piece, int square) {
         nnuelayer1[64 * (6 * (color ^ 1) + piece) + 56 ^ square][i];
   }
 }
-void NNUE::initializennue() {
+void NNUE::initializennue(uint64_t *Bitboards) {
   for (int i = 0; i < nnuesize; i++) {
     whitehidden[i] = layer1bias[i];
     blackhidden[i] = layer1bias[i];
   }
   for (int i = 0; i < 12; i++) {
-    U64 pieces = (Bitboards[i / 6] & Bitboards[2 + (i % 6)]);
-    int piececount = popcount(pieces);
+    uint64_t pieces = (Bitboards[i / 6] & Bitboards[2 + (i % 6)]);
+    int piececount = __builtin_popcountll(pieces);
     for (int j = 0; j < piececount; j++) {
-      int square = popcount((pieces & -pieces) - 1);
+      int square = __builtin_popcountll((pieces & -pieces) - 1);
       activatepiece(i / 6, i % 6, square);
       pieces ^= (1ULL << square);
     }
