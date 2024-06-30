@@ -1,6 +1,5 @@
 #include "nnue.cpp"
 #include <algorithm>
-#include <bit>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -234,10 +233,10 @@ void initializerankattacks() {
 }
 U64 FileAttacks(U64 occupied, int square) {
   U64 forwards = occupied & FileMask[square];
-  U64 backwards = std::byteswap(forwards);
+  U64 backwards = __builtin_bswap64(forwards);
   forwards = forwards - 2 * (1ULL << square);
   backwards = backwards - 2 * (1ULL << (56 ^ square));
-  backwards = std::byteswap(backwards);
+  backwards = __builtin_bswap64(backwards);
   return (forwards ^ backwards) & FileMask[square];
 }
 U64 GetRankAttacks(U64 occupied, int square) {
@@ -358,7 +357,7 @@ int repetitions() {
   return repeats;
 }
 U64 checkers(int color) {
-  int kingsquare = std::popcount((Bitboards[color] & Bitboards[7]) - 1);
+  int kingsquare = __builtin_ctzll(Bitboards[color] & Bitboards[7]);
   int opposite = color ^ 1;
   U64 attacks = 0ULL;
   U64 occupied = Bitboards[0] | Bitboards[1];
@@ -498,7 +497,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
   movecount = 0;
   mobilitym[color] = 0;
   mobilitye[color] = 0;
-  int kingsquare = std::popcount((Bitboards[color] & Bitboards[7]) - 1);
+  int kingsquare = __builtin_ctzll(Bitboards[color] & Bitboards[7]);
   int pinrank = kingsquare & 56;
   int pinfile = kingsquare & 7;
   int opposite = color ^ 1;
@@ -514,40 +513,40 @@ int generatemoves(int color, bool capturesonly, int depth) {
   U64 opponentferzes = Bitboards[opposite] & Bitboards[4];
   U64 opponentknights = Bitboards[opposite] & Bitboards[5];
   U64 opponentrooks = Bitboards[opposite] & Bitboards[6];
-  int pawncount = std::popcount(opponentpawns);
-  int alfilcount = std::popcount(opponentalfils);
-  int ferzcount = std::popcount(opponentferzes);
-  int knightcount = std::popcount(opponentknights);
-  int rookcount = std::popcount(opponentrooks);
+  int pawncount = __builtin_popcountll(opponentpawns);
+  int alfilcount = __builtin_popcountll(opponentalfils);
+  int ferzcount = __builtin_popcountll(opponentferzes);
+  int knightcount = __builtin_popcountll(opponentknights);
+  int rookcount = __builtin_popcountll(opponentrooks);
   U64 ourcaptures = 0ULL;
   U64 ourmoves = 0ULL;
   U64 ourmask = 0ULL;
   for (int i = 0; i < pawncount; i++) {
-    int pawnsquare = std::popcount((opponentpawns & -opponentpawns) - 1);
+    int pawnsquare = __builtin_ctzll(opponentpawns);
     opponentattacks |= PawnAttacks[opposite][pawnsquare];
     opponentpawns ^= (1ULL << pawnsquare);
   }
   U64 opponentpawnattacks = opponentattacks;
   for (int i = 0; i < alfilcount; i++) {
-    int alfilsquare = std::popcount((opponentalfils & -opponentalfils) - 1);
+    int alfilsquare = __builtin_ctzll(opponentalfils);
     opponentattacks |= AlfilAttacks[alfilsquare];
     opponentalfils ^= (1ULL << alfilsquare);
   }
   U64 opponentalfilattacks = opponentattacks;
   for (int i = 0; i < ferzcount; i++) {
-    int ferzsquare = std::popcount((opponentferzes & -opponentferzes) - 1);
+    int ferzsquare = __builtin_ctzll(opponentferzes);
     opponentattacks |= FerzAttacks[ferzsquare];
     opponentferzes ^= (1ULL << ferzsquare);
   }
   U64 opponentferzattacks = opponentattacks;
   for (int i = 0; i < knightcount; i++) {
-    int knightsquare = std::popcount((opponentknights & -opponentknights) - 1);
+    int knightsquare = __builtin_ctzll(opponentknights);
     opponentattacks |= KnightAttacks[knightsquare];
     opponentknights ^= (1ULL << knightsquare);
   }
   U64 opponentknightattacks = opponentattacks;
   for (int i = 0; i < rookcount; i++) {
-    int rooksquare = std::popcount((opponentrooks & -opponentrooks) - 1);
+    int rooksquare = __builtin_ctzll(opponentrooks);
     U64 r = GetRankAttacks(occupied, rooksquare);
     U64 file = FileAttacks(occupied, rooksquare);
     if (!(r & (1ULL << kingsquare))) {
@@ -563,16 +562,16 @@ int generatemoves(int color, bool capturesonly, int depth) {
     opponentattacks |= (r | file);
     opponentrooks ^= (1ULL << rooksquare);
   }
-  int opponentking = std::popcount((Bitboards[opposite] & Bitboards[7]) - 1);
+  int opponentking = __builtin_ctzll(Bitboards[opposite] & Bitboards[7]);
   opponentattacks |= KingAttacks[opponentking];
   ourcaptures =
       KingAttacks[kingsquare] & ((~opponentattacks) & Bitboards[opposite]);
-  mobilitye[color] +=
-      kingmobe[std::popcount(KingAttacks[kingsquare] & (~opponentattacks))];
-  int capturenumber = std::popcount(ourcaptures);
+  mobilitye[color] += kingmobe[__builtin_popcountll(KingAttacks[kingsquare] &
+                                                    (~opponentattacks))];
+  int capturenumber = __builtin_popcountll(ourcaptures);
   int movenumber;
   for (int i = 0; i < capturenumber; i++) {
-    int capturesquare = std::popcount((ourcaptures & -ourcaptures) - 1);
+    int capturesquare = __builtin_ctzll(ourcaptures);
     int notation = kingsquare | (capturesquare << 6);
     notation |= (color << 12);
     notation |= (7 << 13);
@@ -592,9 +591,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
   }
   if (!capturesonly) {
     ourmoves = KingAttacks[kingsquare] & ((~opponentattacks) & (~preoccupied));
-    movenumber = std::popcount(ourmoves);
+    movenumber = __builtin_popcountll(ourmoves);
     for (int i = 0; i < movenumber; i++) {
-      int movesquare = std::popcount((ourmoves & -ourmoves) - 1);
+      int movesquare = __builtin_ctzll(ourmoves);
       int notation = kingsquare | (movesquare << 6);
       notation |= (color << 12);
       notation |= (7 << 13);
@@ -605,7 +604,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
   }
   U64 checks = checkers(color);
-  if (std::popcount(checks) > 1) {
+  if (__builtin_popcountll(checks) > 1) {
     return movecount;
   } else if (checks) {
     checkmask |= checks;
@@ -617,13 +616,13 @@ int generatemoves(int color, bool capturesonly, int depth) {
   U64 ourferzes = Bitboards[color] & Bitboards[4];
   U64 ourknights = Bitboards[color] & Bitboards[5];
   U64 ourrooks = Bitboards[color] & Bitboards[6];
-  pawncount = std::popcount(ourpawns);
-  alfilcount = std::popcount(ouralfils);
-  ferzcount = std::popcount(ourferzes);
-  knightcount = std::popcount(ourknights);
-  rookcount = std::popcount(ourrooks);
+  pawncount = __builtin_popcountll(ourpawns);
+  alfilcount = __builtin_popcountll(ouralfils);
+  ferzcount = __builtin_popcountll(ourferzes);
+  knightcount = __builtin_popcountll(ourknights);
+  rookcount = __builtin_popcountll(ourrooks);
   for (int i = 0; i < pawncount; i++) {
-    int pawnsquare = std::popcount((ourpawns & -ourpawns) - 1);
+    int pawnsquare = __builtin_ctzll(ourpawns);
     if ((pinnedpieces & (1ULL << pawnsquare)) &&
         ((pawnsquare & 56) == pinrank)) {
       ourpawns ^= (1ULL << pawnsquare);
@@ -636,10 +635,10 @@ int generatemoves(int color, bool capturesonly, int depth) {
     if ((pinnedpieces & (1ULL << pawnsquare)) == 0ULL) {
       ourcaptures = PawnAttacks[color][pawnsquare] & Bitboards[opposite];
       ourcaptures &= checkmask;
-      capturenumber = std::popcount(ourcaptures);
+      capturenumber = __builtin_popcountll(ourcaptures);
     }
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = std::popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = pawnsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (2 << 13);
@@ -668,9 +667,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     if (!capturesonly) {
       ourmoves = (1ULL << (pawnsquare + 8 * (1 - 2 * color))) & (~preoccupied);
       ourmoves &= checkmask;
-      int movenumber = std::popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = std::popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = pawnsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (2 << 13);
@@ -691,21 +690,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ourpawns ^= (1ULL << pawnsquare);
   }
   for (int i = 0; i < alfilcount; i++) {
-    int alfilsquare = std::popcount((ouralfils & -ouralfils) - 1);
+    int alfilsquare = __builtin_ctzll(ouralfils);
     if (pinnedpieces & (1ULL << alfilsquare)) {
       ouralfils ^= (1ULL << alfilsquare);
       continue;
     }
     ourmask = AlfilAttacks[alfilsquare];
-    mobilitym[color] += alfilmobm[std::popcount(
+    mobilitym[color] += alfilmobm[__builtin_popcountll(
         ourmask & (~opponentpawnattacks) & (~Bitboards[color]))];
-    mobilitye[color] += alfilmobe[std::popcount(
+    mobilitye[color] += alfilmobe[__builtin_popcountll(
         ourmask & (~opponentpawnattacks) & (~Bitboards[color]))];
     ourmask &= checkmask;
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = std::popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = std::popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = alfilsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (3 << 13);
@@ -725,9 +724,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = std::popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = std::popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = alfilsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (3 << 13);
@@ -740,21 +739,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ouralfils ^= (1ULL << alfilsquare);
   }
   for (int i = 0; i < ferzcount; i++) {
-    int ferzsquare = std::popcount((ourferzes & -ourferzes) - 1);
+    int ferzsquare = __builtin_ctzll(ourferzes);
     if (pinnedpieces & (1ULL << ferzsquare)) {
       ourferzes ^= (1ULL << ferzsquare);
       continue;
     }
     ourmask = FerzAttacks[ferzsquare];
-    mobilitym[color] += ferzmobm[std::popcount(
+    mobilitym[color] += ferzmobm[__builtin_popcountll(
         ourmask & (~opponentalfilattacks) & (~Bitboards[color]))];
-    mobilitye[color] += ferzmobe[std::popcount(
+    mobilitye[color] += ferzmobe[__builtin_popcountll(
         ourmask & (~opponentalfilattacks) & (~Bitboards[color]))];
     ourmask &= checkmask;
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = std::popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = std::popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = ferzsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (4 << 13);
@@ -774,9 +773,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = std::popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = std::popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = ferzsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (4 << 13);
@@ -789,21 +788,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ourferzes ^= (1ULL << ferzsquare);
   }
   for (int i = 0; i < knightcount; i++) {
-    int knightsquare = std::popcount((ourknights & -ourknights) - 1);
+    int knightsquare = __builtin_ctzll(ourknights);
     if (pinnedpieces & (1ULL << knightsquare)) {
       ourknights ^= (1ULL << knightsquare);
       continue;
     }
     ourmask = KnightAttacks[knightsquare];
-    mobilitym[color] += knightmobm[std::popcount(
+    mobilitym[color] += knightmobm[__builtin_popcountll(
         ourmask & (~opponentferzattacks) & (~Bitboards[color]))];
-    mobilitye[color] += knightmobe[std::popcount(
+    mobilitye[color] += knightmobe[__builtin_popcountll(
         ourmask & (~opponentferzattacks) & (~Bitboards[color]))];
     ourmask &= checkmask;
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = std::popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = std::popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = knightsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (5 << 13);
@@ -823,9 +822,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = std::popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = std::popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = knightsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (5 << 13);
@@ -838,7 +837,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ourknights ^= (1ULL << knightsquare);
   }
   for (int i = 0; i < rookcount; i++) {
-    int rooksquare = std::popcount((ourrooks & -ourrooks) - 1);
+    int rooksquare = __builtin_ctzll(ourrooks);
     ourmask = (GetRankAttacks(preoccupied, rooksquare) |
                FileAttacks(preoccupied, rooksquare));
     U64 pinmask = ~(0ULL);
@@ -850,15 +849,15 @@ int generatemoves(int color, bool capturesonly, int depth) {
         pinmask = FileAttacks(preoccupied, rooksquare);
       }
     }
-    mobilitym[color] += rookmobm[std::popcount(
+    mobilitym[color] += rookmobm[__builtin_popcountll(
         ourmask & (~opponentknightattacks) & (~Bitboards[color]))];
-    mobilitye[color] += rookmobe[std::popcount(
+    mobilitye[color] += rookmobe[__builtin_popcountll(
         ourmask & (~opponentknightattacks) & (~Bitboards[color]))];
     ourmask &= (pinmask & checkmask);
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = std::popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = std::popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = rooksquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (6 << 13);
@@ -878,9 +877,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = std::popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = std::popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = rooksquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (6 << 13);
@@ -1205,24 +1204,24 @@ bool see_exceeds(int move, int color, int threshold) {
   U64 kings = KingAttacks[target] & Bitboards[7];
   occupied ^= (enemy & Bitboards[6]);
   pieces[0][0] =
-      std::popcount((PawnAttacks[color][target] & Bitboards[2] & enemy));
-  pieces[0][1] = std::popcount(alfils & enemy);
-  pieces[0][2] = std::popcount(ferzes & enemy);
-  pieces[0][3] = std::popcount(knights & enemy);
-  pieces[0][4] = std::popcount(
+      __builtin_popcountll((PawnAttacks[color][target] & Bitboards[2] & enemy));
+  pieces[0][1] = __builtin_popcountll(alfils & enemy);
+  pieces[0][2] = __builtin_popcountll(ferzes & enemy);
+  pieces[0][3] = __builtin_popcountll(knights & enemy);
+  pieces[0][4] = __builtin_popcountll(
       (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
       Bitboards[6] & enemy);
-  pieces[0][5] = std::popcount(kings & enemy);
+  pieces[0][5] = __builtin_popcountll(kings & enemy);
   occupied ^= (Bitboards[6]);
-  pieces[1][0] =
-      std::popcount((PawnAttacks[color ^ 1][target] & Bitboards[2] & us));
-  pieces[1][1] = std::popcount(alfils & us);
-  pieces[1][2] = std::popcount(ferzes & us);
-  pieces[1][3] = std::popcount(knights & us);
-  pieces[1][4] = std::popcount(
+  pieces[1][0] = __builtin_popcountll(
+      (PawnAttacks[color ^ 1][target] & Bitboards[2] & us));
+  pieces[1][1] = __builtin_popcountll(alfils & us);
+  pieces[1][2] = __builtin_popcountll(ferzes & us);
+  pieces[1][3] = __builtin_popcountll(knights & us);
+  pieces[1][4] = __builtin_popcountll(
       (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
       Bitboards[6] & us);
-  pieces[1][5] = std::popcount(kings & us);
+  pieces[1][5] = __builtin_popcountll(kings & us);
   if (attacker > 2) {
     pieces[1][attacker - 2]--;
   }
@@ -1538,10 +1537,11 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   return bestscore;
 }
 int wdlmodel(int eval) {
-  int material = std::popcount(Bitboards[2]) + std::popcount(Bitboards[3]) +
-                 2 * std::popcount(Bitboards[4]) +
-                 4 * std::popcount(Bitboards[5]) +
-                 6 * std::popcount(Bitboards[6]);
+  int material = __builtin_popcountll(Bitboards[2]) +
+                 __builtin_popcountll(Bitboards[3]) +
+                 2 * __builtin_popcountll(Bitboards[4]) +
+                 4 * __builtin_popcountll(Bitboards[5]) +
+                 6 * __builtin_popcountll(Bitboards[6]);
   double m = std::max(std::min(material, 64), 4) / 32.0;
   double as[4] = {12.86611189, -1.56947052, -105.75177291, 247.30758159};
   double bs[4] = {-7.31901285, 36.79299424, -14.98330140, 64.14426025};
@@ -1550,10 +1550,11 @@ int wdlmodel(int eval) {
   return int(0.5 + 1000 / (1 + exp((a - double(eval)) / b)));
 }
 int normalize(int eval) {
-  int material = std::popcount(Bitboards[2]) + std::popcount(Bitboards[3]) +
-                 2 * std::popcount(Bitboards[4]) +
-                 4 * std::popcount(Bitboards[5]) +
-                 6 * std::popcount(Bitboards[6]);
+  int material = __builtin_popcountll(Bitboards[2]) +
+                 __builtin_popcountll(Bitboards[3]) +
+                 2 * __builtin_popcountll(Bitboards[4]) +
+                 4 * __builtin_popcountll(Bitboards[5]) +
+                 6 * __builtin_popcountll(Bitboards[6]);
   double m = std::max(std::min(material, 64), 4) / 32.0;
   double as[4] = {12.86611189, -1.56947052, -105.75177291, 247.30758159};
   double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
@@ -1753,7 +1754,7 @@ void autoplay() {
     } else {
       makemove(bestmove, 0);
     }
-    if (std::popcount(Bitboards[0] | Bitboards[1]) == 2) {
+    if (__builtin_popcountll(Bitboards[0] | Bitboards[1]) == 2) {
       finished = true;
       result = "0.5";
     } else if (Bitboards[color] == (Bitboards[color] & Bitboards[7])) {
