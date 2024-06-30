@@ -1,6 +1,5 @@
 #include "nnue.cpp"
 #include <algorithm>
-#include <bit>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -8,7 +7,6 @@
 #include <string>
 #include <time.h>
 using U64 = uint64_t;
-using namespace std;
 
 U64 FileA = 0x0101010101010101;
 U64 FileB = FileA << 1;
@@ -59,7 +57,7 @@ int nodecount = 0;
 int bestmove = 0;
 U64 zobristhash = 0ULL;
 int movetime = 0;
-string proto = "uci";
+std::string proto = "uci";
 bool gosent = false;
 bool stopsearch = false;
 bool suppressoutput = false;
@@ -68,7 +66,7 @@ bool suppressoutput = false;
 // castling, 1 bit double pawn push, 1 bit en passant, 1 bit promotion, 2 bits
 // promoted piece, 1 bit capture, 3 bits piece captured 26 bits total for now?
 int movecount;
-auto start = chrono::steady_clock::now();
+auto start = std::chrono::steady_clock::now();
 bool useNNUE = false;
 bool showWDL = false;
 NNUE EUNN;
@@ -147,10 +145,10 @@ int capthist[2][6][6];
 int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0};
 int phase[6] = {0, 1, 2, 4, 6, 0};
 int gamephase[2] = {0, 0};
-ofstream bookoutput;
-ifstream datainput;
-string outputfile;
-string inputfile;
+std::ofstream bookoutput;
+std::ifstream datainput;
+std::string outputfile;
+std::string inputfile;
 struct TTentry {
   U64 key;
   int score;
@@ -160,7 +158,7 @@ struct TTentry {
   int hashmove;
 };
 int TTsize = 1048576;
-vector<TTentry> TT(TTsize);
+std::vector<TTentry> TT(TTsize);
 struct abinfo {
   int playedmove;
   int eval;
@@ -235,10 +233,10 @@ void initializerankattacks() {
 }
 U64 FileAttacks(U64 occupied, int square) {
   U64 forwards = occupied & FileMask[square];
-  U64 backwards = byteswap(forwards);
+  U64 backwards = __builtin_bswap64(forwards);
   forwards = forwards - 2 * (1ULL << square);
   backwards = backwards - 2 * (1ULL << (56 ^ square));
-  backwards = byteswap(backwards);
+  backwards = __builtin_bswap64(backwards);
   return (forwards ^ backwards) & FileMask[square];
 }
 U64 GetRankAttacks(U64 occupied, int square) {
@@ -248,7 +246,7 @@ U64 GetRankAttacks(U64 occupied, int square) {
   return (RankAttacks[8 * relevant + file] << row);
 }
 void initializezobrist() {
-  mt19937_64 mt(20346892);
+  std::mt19937_64 mt(20346892);
   for (int i = 0; i < 8; i++) {
     for (int j = 0; j < 64; j++) {
       hashes[i][j] = mt();
@@ -359,7 +357,7 @@ int repetitions() {
   return repeats;
 }
 U64 checkers(int color) {
-  int kingsquare = popcount((Bitboards[color] & Bitboards[7]) - 1);
+  int kingsquare = __builtin_ctzll(Bitboards[color] & Bitboards[7]);
   int opposite = color ^ 1;
   U64 attacks = 0ULL;
   U64 occupied = Bitboards[0] | Bitboards[1];
@@ -499,7 +497,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
   movecount = 0;
   mobilitym[color] = 0;
   mobilitye[color] = 0;
-  int kingsquare = popcount((Bitboards[color] & Bitboards[7]) - 1);
+  int kingsquare = __builtin_ctzll(Bitboards[color] & Bitboards[7]);
   int pinrank = kingsquare & 56;
   int pinfile = kingsquare & 7;
   int opposite = color ^ 1;
@@ -515,40 +513,40 @@ int generatemoves(int color, bool capturesonly, int depth) {
   U64 opponentferzes = Bitboards[opposite] & Bitboards[4];
   U64 opponentknights = Bitboards[opposite] & Bitboards[5];
   U64 opponentrooks = Bitboards[opposite] & Bitboards[6];
-  int pawncount = popcount(opponentpawns);
-  int alfilcount = popcount(opponentalfils);
-  int ferzcount = popcount(opponentferzes);
-  int knightcount = popcount(opponentknights);
-  int rookcount = popcount(opponentrooks);
+  int pawncount = __builtin_popcountll(opponentpawns);
+  int alfilcount = __builtin_popcountll(opponentalfils);
+  int ferzcount = __builtin_popcountll(opponentferzes);
+  int knightcount = __builtin_popcountll(opponentknights);
+  int rookcount = __builtin_popcountll(opponentrooks);
   U64 ourcaptures = 0ULL;
   U64 ourmoves = 0ULL;
   U64 ourmask = 0ULL;
   for (int i = 0; i < pawncount; i++) {
-    int pawnsquare = popcount((opponentpawns & -opponentpawns) - 1);
+    int pawnsquare = __builtin_ctzll(opponentpawns);
     opponentattacks |= PawnAttacks[opposite][pawnsquare];
     opponentpawns ^= (1ULL << pawnsquare);
   }
   U64 opponentpawnattacks = opponentattacks;
   for (int i = 0; i < alfilcount; i++) {
-    int alfilsquare = popcount((opponentalfils & -opponentalfils) - 1);
+    int alfilsquare = __builtin_ctzll(opponentalfils);
     opponentattacks |= AlfilAttacks[alfilsquare];
     opponentalfils ^= (1ULL << alfilsquare);
   }
   U64 opponentalfilattacks = opponentattacks;
   for (int i = 0; i < ferzcount; i++) {
-    int ferzsquare = popcount((opponentferzes & -opponentferzes) - 1);
+    int ferzsquare = __builtin_ctzll(opponentferzes);
     opponentattacks |= FerzAttacks[ferzsquare];
     opponentferzes ^= (1ULL << ferzsquare);
   }
   U64 opponentferzattacks = opponentattacks;
   for (int i = 0; i < knightcount; i++) {
-    int knightsquare = popcount((opponentknights & -opponentknights) - 1);
+    int knightsquare = __builtin_ctzll(opponentknights);
     opponentattacks |= KnightAttacks[knightsquare];
     opponentknights ^= (1ULL << knightsquare);
   }
   U64 opponentknightattacks = opponentattacks;
   for (int i = 0; i < rookcount; i++) {
-    int rooksquare = popcount((opponentrooks & -opponentrooks) - 1);
+    int rooksquare = __builtin_ctzll(opponentrooks);
     U64 r = GetRankAttacks(occupied, rooksquare);
     U64 file = FileAttacks(occupied, rooksquare);
     if (!(r & (1ULL << kingsquare))) {
@@ -564,16 +562,16 @@ int generatemoves(int color, bool capturesonly, int depth) {
     opponentattacks |= (r | file);
     opponentrooks ^= (1ULL << rooksquare);
   }
-  int opponentking = popcount((Bitboards[opposite] & Bitboards[7]) - 1);
+  int opponentking = __builtin_ctzll(Bitboards[opposite] & Bitboards[7]);
   opponentattacks |= KingAttacks[opponentking];
   ourcaptures =
       KingAttacks[kingsquare] & ((~opponentattacks) & Bitboards[opposite]);
-  mobilitye[color] +=
-      kingmobe[popcount(KingAttacks[kingsquare] & (~opponentattacks))];
-  int capturenumber = popcount(ourcaptures);
+  mobilitye[color] += kingmobe[__builtin_popcountll(KingAttacks[kingsquare] &
+                                                    (~opponentattacks))];
+  int capturenumber = __builtin_popcountll(ourcaptures);
   int movenumber;
   for (int i = 0; i < capturenumber; i++) {
-    int capturesquare = popcount((ourcaptures & -ourcaptures) - 1);
+    int capturesquare = __builtin_ctzll(ourcaptures);
     int notation = kingsquare | (capturesquare << 6);
     notation |= (color << 12);
     notation |= (7 << 13);
@@ -593,9 +591,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
   }
   if (!capturesonly) {
     ourmoves = KingAttacks[kingsquare] & ((~opponentattacks) & (~preoccupied));
-    movenumber = popcount(ourmoves);
+    movenumber = __builtin_popcountll(ourmoves);
     for (int i = 0; i < movenumber; i++) {
-      int movesquare = popcount((ourmoves & -ourmoves) - 1);
+      int movesquare = __builtin_ctzll(ourmoves);
       int notation = kingsquare | (movesquare << 6);
       notation |= (color << 12);
       notation |= (7 << 13);
@@ -606,7 +604,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
   }
   U64 checks = checkers(color);
-  if (popcount(checks) > 1) {
+  if (__builtin_popcountll(checks) > 1) {
     return movecount;
   } else if (checks) {
     checkmask |= checks;
@@ -618,13 +616,13 @@ int generatemoves(int color, bool capturesonly, int depth) {
   U64 ourferzes = Bitboards[color] & Bitboards[4];
   U64 ourknights = Bitboards[color] & Bitboards[5];
   U64 ourrooks = Bitboards[color] & Bitboards[6];
-  pawncount = popcount(ourpawns);
-  alfilcount = popcount(ouralfils);
-  ferzcount = popcount(ourferzes);
-  knightcount = popcount(ourknights);
-  rookcount = popcount(ourrooks);
+  pawncount = __builtin_popcountll(ourpawns);
+  alfilcount = __builtin_popcountll(ouralfils);
+  ferzcount = __builtin_popcountll(ourferzes);
+  knightcount = __builtin_popcountll(ourknights);
+  rookcount = __builtin_popcountll(ourrooks);
   for (int i = 0; i < pawncount; i++) {
-    int pawnsquare = popcount((ourpawns & -ourpawns) - 1);
+    int pawnsquare = __builtin_ctzll(ourpawns);
     if ((pinnedpieces & (1ULL << pawnsquare)) &&
         ((pawnsquare & 56) == pinrank)) {
       ourpawns ^= (1ULL << pawnsquare);
@@ -637,10 +635,10 @@ int generatemoves(int color, bool capturesonly, int depth) {
     if ((pinnedpieces & (1ULL << pawnsquare)) == 0ULL) {
       ourcaptures = PawnAttacks[color][pawnsquare] & Bitboards[opposite];
       ourcaptures &= checkmask;
-      capturenumber = popcount(ourcaptures);
+      capturenumber = __builtin_popcountll(ourcaptures);
     }
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = pawnsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (2 << 13);
@@ -669,9 +667,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     if (!capturesonly) {
       ourmoves = (1ULL << (pawnsquare + 8 * (1 - 2 * color))) & (~preoccupied);
       ourmoves &= checkmask;
-      int movenumber = popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = pawnsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (2 << 13);
@@ -692,21 +690,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ourpawns ^= (1ULL << pawnsquare);
   }
   for (int i = 0; i < alfilcount; i++) {
-    int alfilsquare = popcount((ouralfils & -ouralfils) - 1);
+    int alfilsquare = __builtin_ctzll(ouralfils);
     if (pinnedpieces & (1ULL << alfilsquare)) {
       ouralfils ^= (1ULL << alfilsquare);
       continue;
     }
     ourmask = AlfilAttacks[alfilsquare];
-    mobilitym[color] += alfilmobm[popcount(ourmask & (~opponentpawnattacks) &
-                                           (~Bitboards[color]))];
-    mobilitye[color] += alfilmobe[popcount(ourmask & (~opponentpawnattacks) &
-                                           (~Bitboards[color]))];
+    mobilitym[color] += alfilmobm[__builtin_popcountll(
+        ourmask & (~opponentpawnattacks) & (~Bitboards[color]))];
+    mobilitye[color] += alfilmobe[__builtin_popcountll(
+        ourmask & (~opponentpawnattacks) & (~Bitboards[color]))];
     ourmask &= checkmask;
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = alfilsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (3 << 13);
@@ -726,9 +724,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = alfilsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (3 << 13);
@@ -741,21 +739,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ouralfils ^= (1ULL << alfilsquare);
   }
   for (int i = 0; i < ferzcount; i++) {
-    int ferzsquare = popcount((ourferzes & -ourferzes) - 1);
+    int ferzsquare = __builtin_ctzll(ourferzes);
     if (pinnedpieces & (1ULL << ferzsquare)) {
       ourferzes ^= (1ULL << ferzsquare);
       continue;
     }
     ourmask = FerzAttacks[ferzsquare];
-    mobilitym[color] += ferzmobm[popcount(ourmask & (~opponentalfilattacks) &
-                                          (~Bitboards[color]))];
-    mobilitye[color] += ferzmobe[popcount(ourmask & (~opponentalfilattacks) &
-                                          (~Bitboards[color]))];
+    mobilitym[color] += ferzmobm[__builtin_popcountll(
+        ourmask & (~opponentalfilattacks) & (~Bitboards[color]))];
+    mobilitye[color] += ferzmobe[__builtin_popcountll(
+        ourmask & (~opponentalfilattacks) & (~Bitboards[color]))];
     ourmask &= checkmask;
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = ferzsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (4 << 13);
@@ -775,9 +773,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = ferzsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (4 << 13);
@@ -790,21 +788,21 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ourferzes ^= (1ULL << ferzsquare);
   }
   for (int i = 0; i < knightcount; i++) {
-    int knightsquare = popcount((ourknights & -ourknights) - 1);
+    int knightsquare = __builtin_ctzll(ourknights);
     if (pinnedpieces & (1ULL << knightsquare)) {
       ourknights ^= (1ULL << knightsquare);
       continue;
     }
     ourmask = KnightAttacks[knightsquare];
-    mobilitym[color] += knightmobm[popcount(ourmask & (~opponentferzattacks) &
-                                            (~Bitboards[color]))];
-    mobilitye[color] += knightmobe[popcount(ourmask & (~opponentferzattacks) &
-                                            (~Bitboards[color]))];
+    mobilitym[color] += knightmobm[__builtin_popcountll(
+        ourmask & (~opponentferzattacks) & (~Bitboards[color]))];
+    mobilitye[color] += knightmobe[__builtin_popcountll(
+        ourmask & (~opponentferzattacks) & (~Bitboards[color]))];
     ourmask &= checkmask;
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = knightsquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (5 << 13);
@@ -824,9 +822,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = knightsquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (5 << 13);
@@ -839,7 +837,7 @@ int generatemoves(int color, bool capturesonly, int depth) {
     ourknights ^= (1ULL << knightsquare);
   }
   for (int i = 0; i < rookcount; i++) {
-    int rooksquare = popcount((ourrooks & -ourrooks) - 1);
+    int rooksquare = __builtin_ctzll(ourrooks);
     ourmask = (GetRankAttacks(preoccupied, rooksquare) |
                FileAttacks(preoccupied, rooksquare));
     U64 pinmask = ~(0ULL);
@@ -851,15 +849,15 @@ int generatemoves(int color, bool capturesonly, int depth) {
         pinmask = FileAttacks(preoccupied, rooksquare);
       }
     }
-    mobilitym[color] += rookmobm[popcount(ourmask & (~opponentknightattacks) &
-                                          (~Bitboards[color]))];
-    mobilitye[color] += rookmobe[popcount(ourmask & (~opponentknightattacks) &
-                                          (~Bitboards[color]))];
+    mobilitym[color] += rookmobm[__builtin_popcountll(
+        ourmask & (~opponentknightattacks) & (~Bitboards[color]))];
+    mobilitye[color] += rookmobe[__builtin_popcountll(
+        ourmask & (~opponentknightattacks) & (~Bitboards[color]))];
     ourmask &= (pinmask & checkmask);
     ourcaptures = ourmask & Bitboards[opposite];
-    int capturenumber = popcount(ourcaptures);
+    int capturenumber = __builtin_popcountll(ourcaptures);
     for (int j = 0; j < capturenumber; j++) {
-      int capturesquare = popcount((ourcaptures & -ourcaptures) - 1);
+      int capturesquare = __builtin_ctzll(ourcaptures);
       int notation = rooksquare | (capturesquare << 6);
       notation |= (color << 12);
       notation |= (6 << 13);
@@ -879,9 +877,9 @@ int generatemoves(int color, bool capturesonly, int depth) {
     }
     if (!capturesonly) {
       ourmoves = ourmask & (~preoccupied);
-      int movenumber = popcount(ourmoves);
+      int movenumber = __builtin_popcountll(ourmoves);
       for (int j = 0; j < movenumber; j++) {
-        int movesquare = popcount((ourmoves & -ourmoves) - 1);
+        int movesquare = __builtin_ctzll(ourmoves);
         int notation = rooksquare | (movesquare << 6);
         notation |= (color << 12);
         notation |= (6 << 13);
@@ -895,15 +893,15 @@ int generatemoves(int color, bool capturesonly, int depth) {
   }
   return movecount;
 }
-string algebraic(int notation) {
-  string convert[64] = {
+std::string algebraic(int notation) {
+  std::string convert[64] = {
       "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "a2", "b2", "c2",
       "d2", "e2", "f2", "g2", "h2", "a3", "b3", "c3", "d3", "e3", "f3",
       "g3", "h3", "a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4", "a5",
       "b5", "c5", "d5", "e5", "f5", "g5", "h5", "a6", "b6", "c6", "d6",
       "e6", "f6", "g6", "h6", "a7", "b7", "c7", "d7", "e7", "f7", "g7",
       "h7", "a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8"};
-  string header = convert[notation & 63] + convert[(notation >> 6) & 63];
+  std::string header = convert[notation & 63] + convert[(notation >> 6) & 63];
   if (notation & (1 << 20)) {
     header = header + "q";
   }
@@ -916,26 +914,27 @@ U64 perft(int depth, int initialdepth, int color) {
     for (int i = 0; i < movcount; i++) {
       makemove(moves[depth][i], true);
       if (depth == initialdepth) {
-        cout << algebraic(moves[depth][i]);
-        cout << ": ";
+        std::cout << algebraic(moves[depth][i]);
+        std::cout << ": ";
       }
       ans += perft(depth - 1, initialdepth, color ^ 1);
       unmakemove(moves[depth][i]);
     }
     if (depth == initialdepth - 1) {
-      cout << ans << " ";
+      std::cout << ans << " ";
     }
     if (depth == initialdepth) {
-      cout << "\n" << ans << "\n";
-      auto finish = chrono::steady_clock::now();
-      auto diff = chrono::duration_cast<chrono::milliseconds>(finish - start);
+      std::cout << "\n" << ans << "\n";
+      auto finish = std::chrono::steady_clock::now();
+      auto diff =
+          std::chrono::duration_cast<std::chrono::milliseconds>(finish - start);
       int nps = 1000 * (ans / diff.count());
-      cout << "nps " << nps << "\n";
+      std::cout << "nps " << nps << "\n";
     }
     return ans;
   } else {
     if (initialdepth == 2) {
-      cout << movcount << " ";
+      std::cout << movcount << " ";
     }
     return movcount;
   }
@@ -946,8 +945,8 @@ U64 perftnobulk(int depth, int initialdepth, int color) {
   for (int i = 0; i < movcount; i++) {
     makemove(moves[depth][i], true);
     if (depth == initialdepth) {
-      cout << algebraic(moves[depth][i]);
-      cout << ": ";
+      std::cout << algebraic(moves[depth][i]);
+      std::cout << ": ";
     }
     if (depth > 1) {
       ans += perftnobulk(depth - 1, initialdepth, color ^ 1);
@@ -957,18 +956,19 @@ U64 perftnobulk(int depth, int initialdepth, int color) {
     unmakemove(moves[depth][i]);
   }
   if (depth == initialdepth - 1) {
-    cout << ans << " ";
+    std::cout << ans << " ";
   }
   if (depth == initialdepth) {
-    cout << "\n" << ans << "\n";
-    auto finish = chrono::steady_clock::now();
-    auto diff = chrono::duration_cast<chrono::milliseconds>(finish - start);
+    std::cout << "\n" << ans << "\n";
+    auto finish = std::chrono::steady_clock::now();
+    auto diff =
+        std::chrono::duration_cast<std::chrono::milliseconds>(finish - start);
     int nps = 1000 * (ans / diff.count());
-    cout << "nps " << nps << "\n";
+    std::cout << "nps " << nps << "\n";
   }
   return ans;
 }
-void parseFEN(string FEN) {
+void parseFEN(std::string FEN) {
   gamelength = 0;
   last = 0;
   root = 0;
@@ -1113,13 +1113,13 @@ void parseFEN(string FEN) {
   zobrist[0] = zobristhash;
   history[0] = position;
 }
-string getFEN() {
+std::string getFEN() {
   int order[64] = {56, 57, 58, 59, 60, 61, 62, 63, 48, 49, 50, 51, 52,
                    53, 54, 55, 40, 41, 42, 43, 44, 45, 46, 47, 32, 33,
                    34, 35, 36, 37, 38, 39, 24, 25, 26, 27, 28, 29, 30,
                    31, 16, 17, 18, 19, 20, 21, 22, 23, 8,  9,  10, 11,
                    12, 13, 14, 15, 0,  1,  2,  3,  4,  5,  6,  7};
-  string FEN = "";
+  std::string FEN = "";
   int empt = 0;
   char convert[2][6] = {{'P', 'B', 'Q', 'N', 'R', 'K'},
                         {'p', 'b', 'q', 'n', 'r', 'k'}};
@@ -1161,7 +1161,7 @@ string getFEN() {
     FEN = FEN + "w - - ";
   }
   int halfmove = position >> 1;
-  string bruh = "";
+  std::string bruh = "";
   do {
     bruh = bruh + (char)(halfmove % 10 + 48);
     halfmove /= 10;
@@ -1171,7 +1171,7 @@ string getFEN() {
   return FEN;
 }
 int evaluate(int color) {
-  int midphase = min(48, gamephase[0] + gamephase[1]);
+  int midphase = std::min(48, gamephase[0] + gamephase[1]);
   int endphase = 48 - midphase;
   int mideval =
       evalm[color] + mobilitym[color] - evalm[color ^ 1] - mobilitym[color ^ 1];
@@ -1203,23 +1203,25 @@ bool see_exceeds(int move, int color, int threshold) {
   U64 knights = KnightAttacks[target] & Bitboards[5];
   U64 kings = KingAttacks[target] & Bitboards[7];
   occupied ^= (enemy & Bitboards[6]);
-  pieces[0][0] = popcount((PawnAttacks[color][target] & Bitboards[2] & enemy));
-  pieces[0][1] = popcount(alfils & enemy);
-  pieces[0][2] = popcount(ferzes & enemy);
-  pieces[0][3] = popcount(knights & enemy);
-  pieces[0][4] = popcount(
+  pieces[0][0] =
+      __builtin_popcountll((PawnAttacks[color][target] & Bitboards[2] & enemy));
+  pieces[0][1] = __builtin_popcountll(alfils & enemy);
+  pieces[0][2] = __builtin_popcountll(ferzes & enemy);
+  pieces[0][3] = __builtin_popcountll(knights & enemy);
+  pieces[0][4] = __builtin_popcountll(
       (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
       Bitboards[6] & enemy);
-  pieces[0][5] = popcount(kings & enemy);
+  pieces[0][5] = __builtin_popcountll(kings & enemy);
   occupied ^= (Bitboards[6]);
-  pieces[1][0] = popcount((PawnAttacks[color ^ 1][target] & Bitboards[2] & us));
-  pieces[1][1] = popcount(alfils & us);
-  pieces[1][2] = popcount(ferzes & us);
-  pieces[1][3] = popcount(knights & us);
-  pieces[1][4] = popcount(
+  pieces[1][0] = __builtin_popcountll(
+      (PawnAttacks[color ^ 1][target] & Bitboards[2] & us));
+  pieces[1][1] = __builtin_popcountll(alfils & us);
+  pieces[1][2] = __builtin_popcountll(ferzes & us);
+  pieces[1][3] = __builtin_popcountll(knights & us);
+  pieces[1][4] = __builtin_popcountll(
       (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
       Bitboards[6] & us);
-  pieces[1][5] = popcount(kings & us);
+  pieces[1][5] = __builtin_popcountll(kings & us);
   if (attacker > 2) {
     pieces[1][attacker - 2]--;
   }
@@ -1275,9 +1277,9 @@ int quiesce(int alpha, int beta, int color, int depth) {
       }*/
       while (j > 0 && movescore[maxdepth + depth][j] >
                           movescore[maxdepth + depth][j - 1]) {
-        swap(moves[maxdepth + depth][j], moves[maxdepth + depth][j - 1]);
-        swap(movescore[maxdepth + depth][j],
-             movescore[maxdepth + depth][j - 1]);
+        std::swap(moves[maxdepth + depth][j], moves[maxdepth + depth][j - 1]);
+        std::swap(movescore[maxdepth + depth][j],
+                  movescore[maxdepth + depth][j - 1]);
         j--;
       }
     }
@@ -1332,7 +1334,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   int ttmove = 0;
   int bestmove1 = -1;
   int ttdepth = TT[index].depth;
-  int ttage = max(gamelength - TT[index].age, 0);
+  int ttage = std::max(gamelength - TT[index].age, 0);
   bool update = (depth >= (ttdepth - ttage / 3));
   bool incheck = (checkers(color) != 0ULL);
   bool isPV = (beta - alpha > 1);
@@ -1360,14 +1362,14 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
         }
       }
     } else {
-      int margin = max(40, 70 * (depth - ttdepth - improving));
+      int margin = std::max(40, 70 * (depth - ttdepth - improving));
       if (((nodetype & 1) && (score - margin >= beta)) &&
           (abs(beta) < 27000 && !incheck) && (ply > 0)) {
         return (score + beta) / 2;
       }
     }
   }
-  int margin = max(40, 70 * (depth - improving));
+  int margin = std::max(40, 70 * (depth - improving));
   if (ply > 0 && score == -30000) {
     if (staticeval - margin >= beta && (abs(beta) < 27000 && !incheck)) {
       return (staticeval + beta) / 2;
@@ -1381,7 +1383,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       (staticeval >= beta)) {
     makenullmove();
     searchstack[ply].playedmove = 0;
-    score = -alphabeta(max(0, depth - 2 - (depth + 1) / 3), ply + 1, -beta,
+    score = -alphabeta(std::max(0, depth - 2 - (depth + 1) / 3), ply + 1, -beta,
                        1 - beta, color ^ 1, false, nodelimit, timelimit);
     unmakenullmove();
     if (score >= beta) {
@@ -1424,8 +1426,8 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
         movescore[ply][i]+=15000;
     }*/
     while (j > 0 && movescore[ply][j] > movescore[ply][j - 1]) {
-      swap(moves[ply][j], moves[ply][j - 1]);
-      swap(movescore[ply][j], movescore[ply][j - 1]);
+      std::swap(moves[ply][j], moves[ply][j - 1]);
+      std::swap(movescore[ply][j], movescore[ply][j - 1]);
       j--;
     }
   }
@@ -1438,9 +1440,9 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
       /*if (quiets > 7*depth) {
         prune = true;
       }*/
-      r = min(depth - 1, lmr_reductions[depth][i]);
+      r = std::min(depth - 1, lmr_reductions[depth][i]);
     }
-    r = max(0, r - isPV - improving - movescore[ply][i] / 12000);
+    r = std::max(0, r - isPV - improving - movescore[ply][i] / 12000);
     int e = (movcount == 1);
     if (!stopsearch && !prune) {
       makemove(moves[ply][i], true);
@@ -1519,9 +1521,9 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
         stopsearch = true;
       }
       if (depth > 3) {
-        auto now = chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
         auto timetaken =
-            chrono::duration_cast<chrono::milliseconds>(now - start);
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
         if (timetaken.count() > timelimit) {
           stopsearch = true;
         }
@@ -1535,10 +1537,12 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   return bestscore;
 }
 int wdlmodel(int eval) {
-  int material = popcount(Bitboards[2]) + popcount(Bitboards[3]) +
-                 2 * popcount(Bitboards[4]) + 4 * popcount(Bitboards[5]) +
-                 6 * popcount(Bitboards[6]);
-  double m = max(min(material, 64), 4) / 32.0;
+  int material = __builtin_popcountll(Bitboards[2]) +
+                 __builtin_popcountll(Bitboards[3]) +
+                 2 * __builtin_popcountll(Bitboards[4]) +
+                 4 * __builtin_popcountll(Bitboards[5]) +
+                 6 * __builtin_popcountll(Bitboards[6]);
+  double m = std::max(std::min(material, 64), 4) / 32.0;
   double as[4] = {12.86611189, -1.56947052, -105.75177291, 247.30758159};
   double bs[4] = {-7.31901285, 36.79299424, -14.98330140, 64.14426025};
   double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
@@ -1546,10 +1550,12 @@ int wdlmodel(int eval) {
   return int(0.5 + 1000 / (1 + exp((a - double(eval)) / b)));
 }
 int normalize(int eval) {
-  int material = popcount(Bitboards[2]) + popcount(Bitboards[3]) +
-                 2 * popcount(Bitboards[4]) + 4 * popcount(Bitboards[5]) +
-                 6 * popcount(Bitboards[6]);
-  double m = max(min(material, 64), 4) / 32.0;
+  int material = __builtin_popcountll(Bitboards[2]) +
+                 __builtin_popcountll(Bitboards[3]) +
+                 2 * __builtin_popcountll(Bitboards[4]) +
+                 4 * __builtin_popcountll(Bitboards[5]) +
+                 6 * __builtin_popcountll(Bitboards[6]);
+  double m = std::max(std::min(material, 64), 4) / 32.0;
   double as[4] = {12.86611189, -1.56947052, -105.75177291, 247.30758159};
   double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
   return round(100 * eval / a);
@@ -1557,7 +1563,7 @@ int normalize(int eval) {
 int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
   nodecount = 0;
   stopsearch = false;
-  start = chrono::steady_clock::now();
+  start = std::chrono::steady_clock::now();
   int score = evaluate(color);
   int returnedscore = score;
   int depth = 1;
@@ -1584,8 +1590,9 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
         fail = false;
       }
     }
-    auto now = chrono::steady_clock::now();
-    auto timetaken = chrono::duration_cast<chrono::milliseconds>(now - start);
+    auto now = std::chrono::steady_clock::now();
+    auto timetaken =
+        std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
     if (nodecount < nodelimit && timetaken.count() < hardtimelimit &&
         depth < maxdepth && bestmove >= 0) {
       returnedscore = score;
@@ -1618,19 +1625,21 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
       if (proto == "uci" && !suppressoutput) {
         if (abs(score) <= 27000) {
           int normalscore = normalize(score);
-          cout << "info depth " << depth << " nodes " << nodecount << " time "
-               << timetaken.count() << " score cp " << normalscore;
+          std::cout << "info depth " << depth << " nodes " << nodecount
+                    << " time " << timetaken.count() << " score cp "
+                    << normalscore;
           if (showWDL) {
             int winrate = wdlmodel(score);
             int lossrate = wdlmodel(-score);
             int drawrate = 1000 - winrate - lossrate;
-            cout << " wdl " << winrate << " " << drawrate << " " << lossrate;
+            std::cout << " wdl " << winrate << " " << drawrate << " "
+                      << lossrate;
           }
-          cout << " pv ";
+          std::cout << " pv ";
           for (int i = 0; i < last; i++) {
-            cout << algebraic(pvtable[i]) << " ";
+            std::cout << algebraic(pvtable[i]) << " ";
           }
-          cout << "\n";
+          std::cout << "\n";
         } else {
           int matescore;
           if (score > 0) {
@@ -1638,27 +1647,28 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
           } else {
             matescore = (-28000 - score) / 2;
           }
-          cout << "info depth " << depth << " nodes " << nodecount << " time "
-               << timetaken.count() << " score mate " << matescore;
+          std::cout << "info depth " << depth << " nodes " << nodecount
+                    << " time " << timetaken.count() << " score mate "
+                    << matescore;
           if (showWDL) {
             int winrate = 1000 * (matescore > 0);
             int lossrate = 1000 * (matescore < 0);
-            cout << " wdl " << winrate << " 0 " << lossrate;
+            std::cout << " wdl " << winrate << " 0 " << lossrate;
           }
-          cout << " pv ";
+          std::cout << " pv ";
           for (int i = 0; i < last; i++) {
-            cout << algebraic(pvtable[i]) << " ";
+            std::cout << algebraic(pvtable[i]) << " ";
           }
-          cout << "\n";
+          std::cout << "\n";
         }
       }
       if (proto == "xboard") {
-        cout << depth << " " << score << " " << timetaken.count() / 10 << " "
-             << nodecount << " ";
+        std::cout << depth << " " << score << " " << timetaken.count() / 10
+                  << " " << nodecount << " ";
         for (int i = 0; i < last; i++) {
-          cout << algebraic(pvtable[i]) << " ";
+          std::cout << algebraic(pvtable[i]) << " ";
         }
-        cout << "\n";
+        std::cout << "\n";
       }
       depth++;
       if (depth == maxdepth) {
@@ -1672,17 +1682,18 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
       stopsearch = true;
     }
   }
-  auto now = chrono::steady_clock::now();
-  auto timetaken = chrono::duration_cast<chrono::milliseconds>(now - start);
+  auto now = std::chrono::steady_clock::now();
+  auto timetaken =
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
   if (timetaken.count() > 0 && (proto == "uci") && !suppressoutput) {
     int nps = 1000 * (nodecount / timetaken.count());
-    cout << "info nodes " << nodecount << " nps " << nps << "\n";
+    std::cout << "info nodes " << nodecount << " nps " << nps << "\n";
   }
   if (proto == "uci" && !suppressoutput) {
-    cout << "bestmove " << algebraic(bestmove1) << "\n";
+    std::cout << "bestmove " << algebraic(bestmove1) << "\n";
   }
   if (proto == "xboard") {
-    cout << "move " << algebraic(bestmove1) << "\n";
+    std::cout << "move " << algebraic(bestmove1) << "\n";
     makemove(bestmove1, 0);
   }
   bestmove = bestmove1;
@@ -1693,8 +1704,8 @@ void autoplay() {
   initializett();
   resethistory();
   initializeboard();
-  string game = "";
-  string result = "";
+  std::string game = "";
+  std::string result = "";
   int extra = (rand() >> 11) & 1;
   for (int i = 0; i < 7 + extra; i++) {
     int num_moves = generatemoves(i & 1, 0, 0);
@@ -1720,7 +1731,7 @@ void autoplay() {
     initializeboard();
     return;
   }
-  string fens[1024];
+  std::string fens[1024];
   int scores[1024];
   int max = 0;
   bool finished = false;
@@ -1738,12 +1749,12 @@ void autoplay() {
     << "\n";
     }*/
     if (bestmove == 0) {
-      cout << "Null best move? mitigating by using proper null move \n";
+      std::cout << "Null best move? mitigating by using proper null move \n";
       makenullmove();
     } else {
       makemove(bestmove, 0);
     }
-    if (popcount(Bitboards[0] | Bitboards[1]) == 2) {
+    if (__builtin_popcountll(Bitboards[0] | Bitboards[1]) == 2) {
       finished = true;
       result = "0.5";
     } else if (Bitboards[color] == (Bitboards[color] & Bitboards[7])) {
@@ -1801,10 +1812,10 @@ void bookgen(int a, int b, int depth) {
 void extractTexel() {
   while (datainput.good()) {
     initializeboard();
-    string game;
+    std::string game;
     getline(datainput, game);
     int color = position & 1;
-    string mov = "";
+    std::string mov = "";
     char result = game[game.length() - 1];
     for (int i = 0; i < game.length(); i++) {
       if (game[i] == ' ') {
@@ -1831,10 +1842,10 @@ void extractTexel() {
   }
 }
 void uci() {
-  string ucicommand;
-  getline(cin, ucicommand);
+  std::string ucicommand;
+  getline(std::cin, ucicommand);
   if (ucicommand == "uci") {
-    cout
+    std::cout
         << "id name Prolix \n"
         << "id author sscg13 \n"
         << "option name UCI_Variant type combo default shatranj var shatranj \n"
@@ -1847,7 +1858,7 @@ void uci() {
     exit(0);
   }
   if (ucicommand == "isready") {
-    cout << "readyok\n";
+    std::cout << "readyok\n";
   }
   if (ucicommand == "ucinewgame") {
     initializett();
@@ -1857,7 +1868,7 @@ void uci() {
   if (ucicommand.substr(0, 17) == "position startpos") {
     initializeboard();
     int color = 0;
-    string mov = "";
+    std::string mov = "";
     for (int i = 24; i <= ucicommand.length(); i++) {
       if ((ucicommand[i] == ' ') || (i == ucicommand.length())) {
         int len = generatemoves(color, 0, 0);
@@ -1883,10 +1894,10 @@ void uci() {
     while (ucicommand[reader] != 'm' && reader < ucicommand.length()) {
       reader++;
     }
-    string fen = ucicommand.substr(13, reader - 12);
+    std::string fen = ucicommand.substr(13, reader - 12);
     parseFEN(fen);
     int color = position & 1;
-    string mov = "";
+    std::string mov = "";
     for (int i = reader + 6; i <= ucicommand.length(); i++) {
       if ((ucicommand[i] == ' ') || (i == ucicommand.length())) {
         int len = generatemoves(color, 0, 0);
@@ -2018,7 +2029,7 @@ void uci() {
     int score = iterative(1000000000, 120000, 120000, color);
   }
   if (ucicommand.substr(0, 8) == "go perft") {
-    start = chrono::steady_clock::now();
+    start = std::chrono::steady_clock::now();
     int color = position & 1;
     int sum = 0;
     int add = 1;
@@ -2031,7 +2042,7 @@ void uci() {
     perft(sum, sum, color);
   }
   if (ucicommand.substr(0, 9) == "go sperft") {
-    start = chrono::steady_clock::now();
+    start = std::chrono::steady_clock::now();
     int color = position & 1;
     int sum = 0;
     int add = 1;
@@ -2044,7 +2055,7 @@ void uci() {
     perftnobulk(sum, sum, color);
   }
   if (ucicommand.substr(0, 8) == "get book") {
-    bookoutput.open("shatranj book.txt", ofstream::app);
+    bookoutput.open("shatranj book.txt", std::ofstream::app);
     int sum = 0;
     int add = 1;
     int reader = 9;
@@ -2074,9 +2085,9 @@ void uci() {
     }
     int b = sum;
     int depth = (int)(ucicommand[ucicommand.length() - 1] - 48);
-    cout << a << " " << b << " " << depth << "\n";
+    std::cout << a << " " << b << " " << depth << "\n";
     bookgen(a, b, depth);
-    cout << "done \n";
+    std::cout << "done \n";
     bookoutput.close();
   }
   if (ucicommand.substr(0, 10) == "set output") {
@@ -2086,7 +2097,7 @@ void uci() {
     inputfile = ucicommand.substr(10, ucicommand.length() - 10);
   }
   if (ucicommand.substr(0, 8) == "generate") {
-    bookoutput.open(outputfile, ofstream::app);
+    bookoutput.open(outputfile, std::ofstream::app);
     int sum = 0;
     int add = 1;
     int reader = ucicommand.length() - 1;
@@ -2097,14 +2108,14 @@ void uci() {
     }
     for (int i = 0; i < sum; i++) {
       autoplay();
-      cout << i << "\n";
+      std::cout << i << "\n";
     }
     bookoutput.close();
-    cout << "Generation done \n";
+    std::cout << "Generation done \n";
   }
   if (ucicommand.substr(0, 14) == "setoption name") {
     int reader = 15;
-    string option = "";
+    std::string option = "";
     while (ucicommand[reader] != ' ') {
       option += ucicommand[reader];
       reader++;
@@ -2126,12 +2137,12 @@ void uci() {
       }
     }
     if (option == "EvalFile") {
-      string nnuefile = ucicommand.substr(30, ucicommand.length() - 30);
+      std::string nnuefile = ucicommand.substr(30, ucicommand.length() - 30);
       if (nnuefile != "<empty>") {
         EUNN.readnnuefile(nnuefile);
         useNNUE = true;
         EUNN.initializennue(Bitboards);
-        cout << "info string using nnue file " << nnuefile << "\n";
+        std::cout << "info string using nnue file " << nnuefile << "\n";
       } else {
         useNNUE = false;
       }
@@ -2141,7 +2152,7 @@ void uci() {
     }
   }
   if (ucicommand.substr(0, 3) == "see") {
-    string mov = ucicommand.substr(4, ucicommand.length() - 4);
+    std::string mov = ucicommand.substr(4, ucicommand.length() - 4);
     int color = position & 1;
     int movcount = generatemoves(color, 0, 0);
     int internal = 0;
@@ -2150,16 +2161,16 @@ void uci() {
         internal = moves[0][i];
       }
     }
-    cout << algebraic(internal) << " " << see_exceeds(internal, color, 0)
-         << "\n";
+    std::cout << algebraic(internal) << " " << see_exceeds(internal, color, 0)
+              << "\n";
   }
   if (ucicommand == "history") {
     int color = position & 1;
     int movcount = generatemoves(color, 0, 0);
-    cout << "History values:\n";
+    std::cout << "History values:\n";
     for (int i = 0; i < movcount; i++) {
       int internal = moves[0][i];
-      cout
+      std::cout
           << algebraic(internal) << ": "
           << historytable[color][(internal >> 13) & 7 - 2][(internal >> 6) & 63]
           << "\n";
@@ -2167,11 +2178,11 @@ void uci() {
   }
 }
 void xboard() {
-  string xcommand;
-  getline(cin, xcommand);
+  std::string xcommand;
+  getline(std::cin, xcommand);
   if (xcommand.substr(0, 8) == "protover") {
-    cout << "feature ping=1 setboard=1 analyze=0 sigint=0 sigterm=0 "
-            "myname=\"Prolix\" variants=\"shatranj\"\nfeature done=1\n";
+    std::cout << "feature ping=1 setboard=1 analyze=0 sigint=0 sigterm=0 "
+                 "myname=\"Prolix\" variants=\"shatranj\"\nfeature done=1\n";
   }
   if (xcommand == "new") {
     initializett();
@@ -2179,7 +2190,7 @@ void xboard() {
     gosent = false;
   }
   if (xcommand.substr(0, 8) == "setboard") {
-    string fen = xcommand.substr(9, xcommand.length() - 9);
+    std::string fen = xcommand.substr(9, xcommand.length() - 9);
     parseFEN(fen);
   }
   if (xcommand.substr(0, 4) == "time") {
@@ -2249,7 +2260,7 @@ void xboard() {
       add *= 10;
       reader--;
     }
-    cout << "pong " << sum << "\n";
+    std::cout << "pong " << sum << "\n";
   }
   if ((xcommand.length() == 4) || (xcommand.length() == 5)) {
     int color = position & 1;
@@ -2285,7 +2296,7 @@ int main(int argc, char *argv[]) {
   resethistory();
   srand(time(0));
   if (argc > 1) {
-    string benchfens[14] = {
+    std::string benchfens[14] = {
         "r5r1/1k6/1pqb4/1Bppn1p1/P1n1p2p/P1N1P2P/2KQ1p2/1RBR2N1 w - - 0 45",
         "8/1R6/4q3/3Nk1p1/2P3p1/3PK3/8/8 w - - 2 83",
         "8/8/8/1KQQQ3/2P3qP/5k2/7b/8 b - - 20 76",
@@ -2302,7 +2313,7 @@ int main(int argc, char *argv[]) {
         "8/4k3/4R3/2PK4/1P3Nn1/P2PPn2/5r2/8 b - - 2 58"};
     suppressoutput = true;
     maxdepth = 14;
-    auto commence = chrono::steady_clock::now();
+    auto commence = std::chrono::steady_clock::now();
     int nodes = 0;
     for (int i = 0; i < 14; i++) {
       initializett();
@@ -2312,17 +2323,17 @@ int main(int argc, char *argv[]) {
       iterative(1000000000, 120000, 120000, color);
       nodes += nodecount;
     }
-    auto conclude = chrono::steady_clock::now();
-    int timetaken =
-        chrono::duration_cast<chrono::milliseconds>(conclude - commence)
-            .count();
+    auto conclude = std::chrono::steady_clock::now();
+    int timetaken = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        conclude - commence)
+                        .count();
     int nps = 1000 * (nodes / timetaken);
-    cout << nodes << " nodes " << nps << " nps\n";
+    std::cout << nodes << " nodes " << nps << " nps\n";
     return 0;
   }
-  getline(cin, proto);
+  getline(std::cin, proto);
   if (proto == "uci") {
-    cout
+    std::cout
         << "id name Prolix \n"
         << "id author sscg13 \n"
         << "option name UCI_Variant type combo default shatranj var shatranj \n"

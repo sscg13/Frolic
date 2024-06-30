@@ -1,6 +1,9 @@
+#include <cmath>
 #include <fstream>
 const int nnuesize = 64;
-int screlu(short int x) { return pow(std::max(std::min((int)x, 255), 0), 2); }
+int screlu(short int x) {
+  return std::pow(std::max(std::min((int)x, 255), 0), 2);
+}
 class NNUE {
   short int nnuelayer1[768][nnuesize];
   short int layer1bias[nnuesize];
