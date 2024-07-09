@@ -1,6 +1,6 @@
 #include <algorithm>
-#include <random>
 #include <iostream>
+#include <random>
 using U64 = uint64_t;
 const U64 FileA = 0x0101010101010101;
 const U64 FileB = FileA << 1;
@@ -95,9 +95,9 @@ const int alfilmobe[5] = {-10, -7, -4, 6, 10};
 const int knightmobm[9] = {-35, -21, -12, -5, 0, 5, 12, 21, 35};
 const int knightmobe[9] = {-41, -26, -10, 1, 9, 17, 25, 31, 35};
 const int rookmobm[15] = {-21, -22, -14, -18, -12, -5, -1, 2,
-                    5,   9,   11,  12,  15,  19, 24};
+                          5,   9,   11,  12,  15,  19, 24};
 const int rookmobe[15] = {-40, -32, -22, -15, -9, -5, -1, 3,
-                    7,   13,  20,  23,  28, 32, 37};
+                          7,   13,  20,  23,  28, 32, 37};
 const int kingmobe[9] = {-61, -38, -15, -6, 3, 13, 22, 28, 33};
 const int phase[6] = {0, 1, 2, 4, 6, 0};
 U64 shift_w(U64 bitboard) { return (bitboard & ~FileA) >> 1; }
@@ -205,42 +205,43 @@ std::string algebraic(int notation) {
   return header;
 }
 class Board {
-int evalm[2] = {0, 0};
-int evale[2] = {0, 0};
-int mobilitym[2] = {0, 0};
-int mobilitye[2] = {0, 0};
-U64 zobrist[1024];
-int history[1024];
-int last = 0;
-int root = 0;
-const int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0};
+  int evalm[2] = {0, 0};
+  int evale[2] = {0, 0};
+  int mobilitym[2] = {0, 0};
+  int mobilitye[2] = {0, 0};
+  U64 zobrist[1024];
+  int history[1024];
+  int last = 0;
+  int root = 0;
+  const int startpiece[16] = {4, 3, 1, 5, 2, 1, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0};
+
 public:
-U64 Bitboards[8];
-int gamelength = 0;
-int position = 0;
-int nodecount = 0;
-int moves[64][256];
-int gamephase[2] = {0, 0};
-U64 zobristhash = 0ULL;
-U64 scratchzobrist();
-void initialize();
-int repetitions();
-int halfmovecount();
-bool twokings();
-bool bareking(int color);
-int material();
-U64 checkers(int color);
-void makenullmove();
-void unmakenullmove();
-void makemove(int notation, bool reversible);
-void unmakemove(int notation);
-int generatemoves(int color, bool capturesonly, int depth);
-U64 perft(int depth, int initialdepth, int color);
-U64 perftnobulk(int depth, int initialdepth, int color);
-void parseFEN(std::string FEN);
-std::string getFEN();
-int evaluate(int color);
-bool see_exceeds(int mov, int color, int threshold);
+  U64 Bitboards[8];
+  int gamelength = 0;
+  int position = 0;
+  int nodecount = 0;
+  int moves[64][256];
+  int gamephase[2] = {0, 0};
+  U64 zobristhash = 0ULL;
+  U64 scratchzobrist();
+  void initialize();
+  int repetitions();
+  int halfmovecount();
+  bool twokings();
+  bool bareking(int color);
+  int material();
+  U64 checkers(int color);
+  void makenullmove();
+  void unmakenullmove();
+  void makemove(int notation, bool reversible);
+  void unmakemove(int notation);
+  int generatemoves(int color, bool capturesonly, int depth);
+  U64 perft(int depth, int initialdepth, int color);
+  U64 perftnobulk(int depth, int initialdepth, int color);
+  void parseFEN(std::string FEN);
+  std::string getFEN();
+  int evaluate(int color);
+  bool see_exceeds(int mov, int color, int threshold);
 };
 
 U64 Board::scratchzobrist() {
@@ -301,21 +302,17 @@ int Board::repetitions() {
   }
   return repeats;
 }
-int Board::halfmovecount() {
-    return (position >> 1);
-}
-bool Board::twokings() {
-    return (Bitboards[0] | Bitboards[1]) == Bitboards[7];
-}
+int Board::halfmovecount() { return (position >> 1); }
+bool Board::twokings() { return (Bitboards[0] | Bitboards[1]) == Bitboards[7]; }
 bool Board::bareking(int color) {
-    return (Bitboards[color] & Bitboards[7]) == Bitboards[color];
+  return (Bitboards[color] & Bitboards[7]) == Bitboards[color];
 }
 int Board::material() {
-    return __builtin_popcountll(Bitboards[2]) +
-                 __builtin_popcountll(Bitboards[3]) +
-                 2 * __builtin_popcountll(Bitboards[4]) +
-                 4 * __builtin_popcountll(Bitboards[5]) +
-                 6 * __builtin_popcountll(Bitboards[6]);
+  return __builtin_popcountll(Bitboards[2]) +
+         __builtin_popcountll(Bitboards[3]) +
+         2 * __builtin_popcountll(Bitboards[4]) +
+         4 * __builtin_popcountll(Bitboards[5]) +
+         6 * __builtin_popcountll(Bitboards[6]);
 }
 U64 Board::checkers(int color) {
   int kingsquare = __builtin_ctzll(Bitboards[color] & Bitboards[7]);
@@ -1158,5 +1155,3 @@ bool Board::see_exceeds(int mov, int color, int threshold) {
     i ^= 1;
   }
 }
-
-
