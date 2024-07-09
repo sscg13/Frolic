@@ -3,33 +3,17 @@
 #include <chrono>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <time.h>
-int maxdepth = 32;
-int killers[32][2];
-int countermoves[6][64];
-int movescore[64][256];
-int bestmove = 0;
-int movetime = 0;
 std::string proto = "uci";
-bool gosent = false;
-bool stopsearch = false;
-bool suppressoutput = false;
 // 1 bit color, 7 bits halfmove
 // 6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit
 // castling, 1 bit double pawn push, 1 bit en passant, 1 bit promotion, 2 bits
 // promoted piece, 1 bit capture, 3 bits piece captured 26 bits total for now?
-int movecount;
+const int maxmaxdepth = 32;
+int lmr_reductions[maxmaxdepth][256];
 auto start = std::chrono::steady_clock::now();
-bool useNNUE = false;
-bool showWDL = false;
-NNUE EUNN;
-Board Bitboards;
-int lmr_reductions[32][256];
-int historytable[2][6][64];
-int capthist[2][6][6];
-std::ofstream bookoutput;
 std::ifstream datainput;
-std::string outputfile;
 std::string inputfile;
 struct TTentry {
   U64 key;
@@ -39,14 +23,51 @@ struct TTentry {
   int nodetype;
   int hashmove;
 };
-int TTsize = 1048576;
-std::vector<TTentry> TT(TTsize);
 struct abinfo {
   int playedmove;
   int eval;
 };
-abinfo searchstack[64];
-void initializett() {
+class Engine {
+  Board Bitboards;
+  int historytable[2][6][64];
+  int capthist[2][6][6];
+  int TTsize = 1048576;
+  std::vector<TTentry> TT;
+  bool useNNUE = false;
+  bool showWDL = false;
+  NNUE EUNN;
+  int killers[32][2];
+  int countermoves[6][64];
+  bool gosent = false;
+  bool stopsearch = false;
+  bool suppressoutput = false;
+  int maxdepth = 32;
+  abinfo searchstack[64];
+  int bestmove = 0;
+  int movetime = 0;
+  std::mt19937 mt;
+  std::ofstream dataoutput;
+  void initializett();
+  void updatett(int index, int depth, int score, int nodetype, int hashmove);
+  void resethistory();
+  int movestrength(int mov, int color);
+  int quiesce(int alpha, int beta, int color, int depth);
+  int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
+                int nodelimit, int timelimit);
+  int wdlmodel(int eval);
+  int normalize(int eval);
+  int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color);
+  void autoplay();
+
+public:
+  void startup();
+  void bench();
+  void datagen(int n, std::string outputfile);
+  void uci();
+  void xboard();
+};
+void Engine::initializett() {
+  TT.resize(TTsize);
   for (int i = 0; i < TTsize; i++) {
     TT[i].key = (U64)i + 1ULL;
     TT[i].score = 0;
@@ -56,7 +77,8 @@ void initializett() {
     TT[i].hashmove = 0;
   }
 }
-void updatett(int index, int depth, int score, int nodetype, int hashmove) {
+void Engine::updatett(int index, int depth, int score, int nodetype,
+                      int hashmove) {
   if (index < TTsize) {
     TT[index].key = Bitboards.zobristhash;
     TT[index].depth = depth;
@@ -66,7 +88,7 @@ void updatett(int index, int depth, int score, int nodetype, int hashmove) {
     TT[index].score = score;
   }
 }
-void resethistory() {
+void Engine::resethistory() {
   for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 64; j++) {
       historytable[0][i][j] = 0;
@@ -83,15 +105,20 @@ void resethistory() {
     killers[i][1] = 0;
   }
 }
+void Engine::startup() {
+  initializett();
+  resethistory();
+  Bitboards.initialize();
+}
 void initializelmr() {
-  for (int i = 0; i < maxdepth; i++) {
+  for (int i = 0; i < maxmaxdepth; i++) {
     for (int j = 0; j < 256; j++) {
       lmr_reductions[i][j] =
           (i == 0 || j == 0) ? 0 : floor(0.59 + log(i) * log(j) * 0.46);
     }
   }
 }
-int movestrength(int mov, int color) {
+int Engine::movestrength(int mov, int color) {
   int to = (mov >> 6) & 63;
   int piece = (mov >> 13) & 7;
   int captured = (mov >> 17) & 7;
@@ -103,7 +130,7 @@ int movestrength(int mov, int color) {
     return 60000 * promoted + historytable[color][piece - 2][to];
   }
 }
-int quiesce(int alpha, int beta, int color, int depth) {
+int Engine::quiesce(int alpha, int beta, int color, int depth) {
   int score = useNNUE ? EUNN.evaluate(color) : Bitboards.evaluate(color);
   int bestscore = -30000;
   int movcount;
@@ -165,8 +192,8 @@ int quiesce(int alpha, int beta, int color, int depth) {
   }
   return bestscore;
 }
-int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
-              int nodelimit, int timelimit) {
+int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
+                      bool nmp, int nodelimit, int timelimit) {
   if (Bitboards.repetitions() > 1) {
     return 0;
   }
@@ -395,7 +422,7 @@ int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
   }
   return bestscore;
 }
-int wdlmodel(int eval) {
+int Engine::wdlmodel(int eval) {
   int material = Bitboards.material();
   double m = std::max(std::min(material, 64), 4) / 32.0;
   double as[4] = {12.86611189, -1.56947052, -105.75177291, 247.30758159};
@@ -404,7 +431,7 @@ int wdlmodel(int eval) {
   double b = (((bs[0] * m + bs[1]) * m + bs[2]) * m) + bs[3];
   return int(0.5 + 1000 / (1 + exp((a - double(eval)) / b)));
 }
-int normalize(int eval) {
+int Engine::normalize(int eval) {
   if (abs(eval) == 27000) {
     return eval;
   }
@@ -414,7 +441,8 @@ int normalize(int eval) {
   double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
   return round(100 * eval / a);
 }
-int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
+int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
+                      int color) {
   Bitboards.nodecount = 0;
   stopsearch = false;
   start = std::chrono::steady_clock::now();
@@ -553,7 +581,7 @@ int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color) {
   bestmove = bestmove1;
   return returnedscore;
 }
-void autoplay() {
+void Engine::autoplay() {
   suppressoutput = true;
   initializett();
   resethistory();
@@ -640,14 +668,56 @@ void autoplay() {
     }
   }
   for (int i = 0; i < maxmove; i++) {
-    bookoutput << fens[i] << " | " << scores[i] << " | " << result << "\n";
+    dataoutput << fens[i] << " | " << scores[i] << " | " << result << "\n";
   }
   suppressoutput = false;
   initializett();
   resethistory();
   Bitboards.initialize();
 }
-void uci() {
+void Engine::datagen(int n, std::string outputfile) {
+  dataoutput.open(outputfile, std::ofstream::app);
+  for (int i = 0; i < n; i++) {
+    autoplay();
+    std::cout << i << "\n";
+  }
+  dataoutput.close();
+}
+void Engine::bench() {
+  std::string benchfens[14] = {
+      "r5r1/1k6/1pqb4/1Bppn1p1/P1n1p2p/P1N1P2P/2KQ1p2/1RBR2N1 w - - 0 45",
+      "8/1R6/4q3/3Nk1p1/2P3p1/3PK3/8/8 w - - 2 83",
+      "8/8/8/1KQQQ3/2P3qP/5k2/7b/8 b - - 20 76",
+      "2r1r3/p1pk1ppp/bpnpp2b/8/3P4/BPQ1PN1P/P1P1KPP1/R6R b - - 1 14",
+      "3kq3/3p4/3p1p2/6pK/1R1Q4/1P1B1r2/8/8 w - - 2 44",
+      "1nbkq3/1rpppr1p/3b1p2/p1PP1Pp1/1p6/PP1NP1PB/3Q3n/RNBKR3 w - - 0 20",
+      "r4br1/8/p2k2qp/7n/1R1N4/3BB1P1/P2PPQ1P/3K4 w - - 3 32",
+      "8/8/8/8/3Qk1n1/2K1P3/8/8 b - - 46 162",
+      "rnbkqbnr/ppppp1p1/5p1p/8/8/3P2P1/PPP1PP1P/RNBKQBNR w - - 0 1",
+      "5b1r/8/1p1pq1p1/p1k3P1/5RP1/P1PB4/4KQ2/8 w - - 1 44",
+      "2r1qr2/8/1pkp2pb/p2pn1N1/3R2PP/3BP1Q1/P1P1R3/2K5 b - - 6 30",
+      "1r2q3/R4pn1/1p1pkn2/3p1p2/1PpP2p1/N1P1K1P1/3Q3P/2B1R3 b - - 5 31",
+      "8/1Q6/3Q4/3p1p2/2pkq2R/5q2/5K2/8 w - - 2 116",
+      "8/4k3/4R3/2PK4/1P3Nn1/P2PPn2/5r2/8 b - - 2 58"};
+  suppressoutput = true;
+  maxdepth = 14;
+  auto commence = std::chrono::steady_clock::now();
+  int nodes = 0;
+  for (int i = 0; i < 14; i++) {
+    startup();
+    Bitboards.parseFEN(benchfens[i]);
+    int color = Bitboards.position & 1;
+    iterative(1000000000, 120000, 120000, color);
+    nodes += Bitboards.nodecount;
+  }
+  auto conclude = std::chrono::steady_clock::now();
+  int timetaken =
+      std::chrono::duration_cast<std::chrono::milliseconds>(conclude - commence)
+          .count();
+  int nps = 1000 * (nodes / timetaken);
+  std::cout << nodes << " nodes " << nps << " nps\n";
+}
+void Engine::uci() {
   std::string ucicommand;
   getline(std::cin, ucicommand);
   if (ucicommand == "uci") {
@@ -860,28 +930,8 @@ void uci() {
     }
     Bitboards.perftnobulk(sum, sum, color);
   }
-  if (ucicommand.substr(0, 10) == "set output") {
-    outputfile = ucicommand.substr(11, ucicommand.length() - 11);
-  }
   if (ucicommand.substr(0, 9) == "set input") {
     inputfile = ucicommand.substr(10, ucicommand.length() - 10);
-  }
-  if (ucicommand.substr(0, 8) == "generate") {
-    bookoutput.open(outputfile, std::ofstream::app);
-    int sum = 0;
-    int add = 1;
-    int reader = ucicommand.length() - 1;
-    while (ucicommand[reader] != ' ') {
-      sum += ((int)(ucicommand[reader] - 48)) * add;
-      add *= 10;
-      reader--;
-    }
-    for (int i = 0; i < sum; i++) {
-      autoplay();
-      std::cout << i << "\n";
-    }
-    bookoutput.close();
-    std::cout << "Generation done \n";
   }
   if (ucicommand.substr(0, 14) == "setoption name") {
     int reader = 15;
@@ -947,7 +997,7 @@ void uci() {
     }
   }
 }
-void xboard() {
+void Engine::xboard() {
   std::string xcommand;
   getline(std::cin, xcommand);
   if (xcommand.substr(0, 8) == "protover") {
@@ -1060,47 +1110,39 @@ int main(int argc, char *argv[]) {
   initializemasks();
   initializerankattacks();
   initializezobrist();
-  Bitboards.initialize();
   initializelmr();
-  initializett();
-  resethistory();
-  srand(time(0));
   if (argc > 1) {
-    std::string benchfens[14] = {
-        "r5r1/1k6/1pqb4/1Bppn1p1/P1n1p2p/P1N1P2P/2KQ1p2/1RBR2N1 w - - 0 45",
-        "8/1R6/4q3/3Nk1p1/2P3p1/3PK3/8/8 w - - 2 83",
-        "8/8/8/1KQQQ3/2P3qP/5k2/7b/8 b - - 20 76",
-        "2r1r3/p1pk1ppp/bpnpp2b/8/3P4/BPQ1PN1P/P1P1KPP1/R6R b - - 1 14",
-        "3kq3/3p4/3p1p2/6pK/1R1Q4/1P1B1r2/8/8 w - - 2 44",
-        "1nbkq3/1rpppr1p/3b1p2/p1PP1Pp1/1p6/PP1NP1PB/3Q3n/RNBKR3 w - - 0 20",
-        "r4br1/8/p2k2qp/7n/1R1N4/3BB1P1/P2PPQ1P/3K4 w - - 3 32",
-        "8/8/8/8/3Qk1n1/2K1P3/8/8 b - - 46 162",
-        "rnbkqbnr/ppppp1p1/5p1p/8/8/3P2P1/PPP1PP1P/RNBKQBNR w - - 0 1",
-        "5b1r/8/1p1pq1p1/p1k3P1/5RP1/P1PB4/4KQ2/8 w - - 1 44",
-        "2r1qr2/8/1pkp2pb/p2pn1N1/3R2PP/3BP1Q1/P1P1R3/2K5 b - - 6 30",
-        "1r2q3/R4pn1/1p1pkn2/3p1p2/1PpP2p1/N1P1K1P1/3Q3P/2B1R3 b - - 5 31",
-        "8/1Q6/3Q4/3p1p2/2pkq2R/5q2/5K2/8 w - - 2 116",
-        "8/4k3/4R3/2PK4/1P3Nn1/P2PPn2/5r2/8 b - - 2 58"};
-    suppressoutput = true;
-    maxdepth = 14;
-    auto commence = std::chrono::steady_clock::now();
-    int nodes = 0;
-    for (int i = 0; i < 14; i++) {
-      initializett();
-      Bitboards.initialize();
-      Bitboards.parseFEN(benchfens[i]);
-      int color = Bitboards.position & 1;
-      iterative(1000000000, 120000, 120000, color);
-      nodes += Bitboards.nodecount;
+    if (std::string(argv[1]) == "bench") {
+      Engine Prolix;
+      Prolix.startup();
+      Prolix.bench();
+      return 0;
     }
-    auto conclude = std::chrono::steady_clock::now();
-    int timetaken = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        conclude - commence)
-                        .count();
-    int nps = 1000 * (nodes / timetaken);
-    std::cout << nodes << " nodes " << nps << " nps\n";
-    return 0;
+    if (std::string(argv[1]) == "datagen") {
+      if (argc < 5) {
+        std::cerr << "Too few arguments given";
+        return 0;
+      }
+      int threads = atoi(argv[2]);
+      int games = atoi(argv[3]);
+      std::cout << "Generating with " << threads << " threads x " << games
+                << " games:\n";
+      std::vector<std::thread> datagenerators(threads);
+      std::vector<Engine> Engines(threads);
+      for (int i = 0; i < threads; i++) {
+        std::string outputfile = std::string(argv[4]) + (char)(i + 48) + ".txt";
+        Engines[i].startup();
+        datagenerators[i] =
+            std::thread(&Engine::datagen, &Engines[i], games, outputfile);
+      }
+      for (auto &thread : datagenerators) {
+        thread.join();
+      }
+      return 0;
+    }
   }
+  Engine Prolix;
+  Prolix.startup();
   getline(std::cin, proto);
   if (proto == "uci") {
     std::cout
@@ -1113,12 +1155,12 @@ int main(int argc, char *argv[]) {
         << "option name UCI_ShowWDL type check default false \n"
         << "uciok\n";
     while (true) {
-      uci();
+      Prolix.uci();
     }
   }
   if (proto == "xboard") {
     while (true) {
-      xboard();
+      Prolix.xboard();
     }
   }
   return 0;
