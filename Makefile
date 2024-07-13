@@ -4,7 +4,7 @@ SOURCES := Prolix.cpp
 
 CXX := clang++
 
-CXXFLAGS := -O3 -march=native -std=c++2b -static -pthread
+CXXFLAGS := -O3 -march=native -static -pthread
 
 SUFFIX := .exe
 
