@@ -6,6 +6,13 @@
 #include <thread>
 #include <time.h>
 std::string proto = "uci";
+std::string uciinfostring =
+    "id name Prolix \nid author sscg13 \noption name UCI_Variant type combo "
+    "default shatranj var shatranj \noption name Threads type spin default 1 "
+    "min 1 max 1 \noption name Hash type spin default 32 min 1 max 1024 "
+    "\noption name Use NNUE type check default true \noption name EvalFile "
+    "type string default <internal> \noption name UCI_ShowWDL type check "
+    "default true \nuciok\n";
 // 1 bit color, 7 bits halfmove
 // 6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit
 // castling, 1 bit double pawn push, 1 bit en passant, 1 bit promotion, 2 bits
@@ -33,8 +40,8 @@ class Engine {
   int capthist[2][6][6];
   int TTsize = 1048576;
   std::vector<TTentry> TT;
-  bool useNNUE = false;
-  bool showWDL = false;
+  bool useNNUE = true;
+  bool showWDL = true;
   NNUE EUNN;
   int killers[32][2];
   int countermoves[6][64];
@@ -109,6 +116,8 @@ void Engine::startup() {
   initializett();
   resethistory();
   Bitboards.initialize();
+  EUNN.loaddefaultnet();
+  EUNN.initializennue(Bitboards.Bitboards);
 }
 void initializelmr() {
   for (int i = 0; i < maxmaxdepth; i++) {
@@ -700,6 +709,7 @@ void Engine::bench() {
       "8/1Q6/3Q4/3p1p2/2pkq2R/5q2/5K2/8 w - - 2 116",
       "8/4k3/4R3/2PK4/1P3Nn1/P2PPn2/5r2/8 b - - 2 58"};
   suppressoutput = true;
+  useNNUE = false;
   maxdepth = 14;
   auto commence = std::chrono::steady_clock::now();
   int nodes = 0;
@@ -721,14 +731,7 @@ void Engine::uci() {
   std::string ucicommand;
   getline(std::cin, ucicommand);
   if (ucicommand == "uci") {
-    std::cout
-        << "id name Prolix \n"
-        << "id author sscg13 \n"
-        << "option name UCI_Variant type combo default shatranj var shatranj \n"
-        << "option name Threads type spin default 1 min 1 max 1 \n"
-        << "option name Hash type spin default 32 min 1 max 1024 \n"
-        << "option name EvalFile type string default <empty> \n"
-        << "uciok\n";
+    std::cout << uciinfostring;
   }
   if (ucicommand == "quit") {
     exit(0);
@@ -958,17 +961,27 @@ void Engine::uci() {
     }
     if (option == "EvalFile") {
       std::string nnuefile = ucicommand.substr(30, ucicommand.length() - 30);
-      if (nnuefile != "<empty>") {
+      if (nnuefile != "<internal>") {
         EUNN.readnnuefile(nnuefile);
-        useNNUE = true;
         EUNN.initializennue(Bitboards.Bitboards);
         std::cout << "info string using nnue file " << nnuefile << "\n";
-      } else {
-        useNNUE = false;
       }
     }
     if (option == "UCI_ShowWDL") {
-      showWDL = true;
+      std::string value = ucicommand.substr(33, ucicommand.length() - 33);
+      if (value == "true") {
+        showWDL = true;
+      } else {
+        showWDL = false;
+      }
+    }
+    if (option == "Use") {
+      std::string value = ucicommand.substr(30, ucicommand.length() - 30);
+      if (value == "true") {
+        useNNUE = true;
+      } else {
+        useNNUE = false;
+      }
     }
   }
   if (ucicommand.substr(0, 3) == "see") {
@@ -1145,15 +1158,7 @@ int main(int argc, char *argv[]) {
   Prolix.startup();
   getline(std::cin, proto);
   if (proto == "uci") {
-    std::cout
-        << "id name Prolix \n"
-        << "id author sscg13 \n"
-        << "option name UCI_Variant type combo default shatranj var shatranj \n"
-        << "option name Threads type spin default 1 min 1 max 1 \n"
-        << "option name Hash type spin default 32 min 1 max 1024 \n"
-        << "option name EvalFile type string default <empty> \n"
-        << "option name UCI_ShowWDL type check default false \n"
-        << "uciok\n";
+    std::cout << uciinfostring;
     while (true) {
       Prolix.uci();
     }
