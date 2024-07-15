@@ -586,6 +586,9 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
   if (proto == "xboard") {
     std::cout << "move " << algebraic(bestmove1) << "\n";
     Bitboards.makemove(bestmove1, 0);
+    if (useNNUE) {
+      EUNN.forwardaccumulators(bestmove1);
+    }
   }
   bestmove = bestmove1;
   return returnedscore;
@@ -1020,11 +1023,13 @@ void Engine::xboard() {
   if (xcommand == "new") {
     initializett();
     Bitboards.initialize();
+    EUNN.initializennue(Bitboards.Bitboards);
     gosent = false;
   }
   if (xcommand.substr(0, 8) == "setboard") {
     std::string fen = xcommand.substr(9, xcommand.length() - 9);
     Bitboards.parseFEN(fen);
+    EUNN.initializennue(Bitboards.Bitboards);
   }
   if (xcommand.substr(0, 4) == "time") {
     int reader = 5;
@@ -1106,6 +1111,9 @@ void Engine::xboard() {
     }
     if (played >= 0) {
       Bitboards.makemove(Bitboards.moves[0][played], false);
+      if (useNNUE) {
+        EUNN.forwardaccumulators(Bitboards.moves[0][played]);
+      }
       if (gosent) {
         int color = Bitboards.position & 1;
         int score = iterative(1000000000, movetime / 3, movetime, color);
