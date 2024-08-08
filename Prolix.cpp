@@ -337,7 +337,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
       }*/
       r = std::min(depth - 1, lmr_reductions[depth][i]);
     }
-    r = std::max(0, r - isPV - improving - movescore[i] / 12000);
+    r = std::max(0, r - isPV - improving);
     int e = (movcount == 1);
     if (!stopsearch && !prune) {
       Bitboards.makemove(mov, true);
