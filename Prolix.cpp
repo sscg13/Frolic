@@ -385,8 +385,8 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
                        27000);
             } else {
               historytable[color][piece - 2][target] +=
-                  (depth * depth * depth -
-                   (depth * depth * depth *
+                  (depth * depth -
+                   (depth * depth *
                     historytable[color][piece - 2][target]) /
                        27000);
             }
