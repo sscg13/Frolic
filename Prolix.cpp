@@ -386,8 +386,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
             } else {
               historytable[color][piece - 2][target] +=
                   (depth * depth -
-                   (depth * depth *
-                    historytable[color][piece - 2][target]) /
+                   (depth * depth * historytable[color][piece - 2][target]) /
                        27000);
             }
             for (int j = 0; j < i; j++) {
@@ -712,7 +711,6 @@ void Engine::bench() {
       "8/1Q6/3Q4/3p1p2/2pkq2R/5q2/5K2/8 w - - 2 116",
       "8/4k3/4R3/2PK4/1P3Nn1/P2PPn2/5r2/8 b - - 2 58"};
   suppressoutput = true;
-  useNNUE = false;
   maxdepth = 14;
   auto commence = std::chrono::steady_clock::now();
   int nodes = 0;
