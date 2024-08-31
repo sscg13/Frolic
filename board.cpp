@@ -204,6 +204,24 @@ std::string algebraic(int notation) {
   }
   return header;
 }
+std::string get8294400FEN(int seed1, int seed2) {
+  std::vector<std::string> rank8 = {"r", "n", "b", "k", "q", "b", "n", "r"};
+  std::vector<std::string> rank1 = {"R", "N", "B", "K", "Q", "B", "N", "R"};
+  std::string FEN = "";
+  for (int i = 8; i > 0; i--) {
+    FEN += rank8[seed1 % i];
+    rank8.erase(rank8.begin() + (seed1 % i));
+    seed1 /= i;
+  }
+  FEN += "/pppppppp/8/8/8/8/PPPPPPPP/";
+  for (int i = 8; i > 0; i--) {
+    FEN += rank1[seed2 % i];
+    rank1.erase(rank1.begin() + (seed2 % i));
+    seed2 /= i;
+  }
+  FEN += " w - - 0 1";
+  return FEN;
+}
 class Board {
   int evalm[2] = {0, 0};
   int evale[2] = {0, 0};
