@@ -1153,7 +1153,8 @@ int main(int argc, char *argv[]) {
       std::vector<std::thread> datagenerators(threads);
       std::vector<Engine> Engines(threads);
       for (int i = 0; i < threads; i++) {
-        std::string outputfile = std::string(argv[4]) + (char)(i + 48) + ".txt";
+        std::string outputfile =
+            std::string(argv[4]) + std::to_string(i) + ".txt";
         Engines[i].startup();
         datagenerators[i] =
             std::thread(&Engine::datagen, &Engines[i], games, outputfile);
