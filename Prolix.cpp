@@ -52,6 +52,7 @@ class Engine {
   abinfo searchstack[64];
   int bestmove = 0;
   int movetime = 0;
+  std::random_device rd;
   std::mt19937 mt;
   std::ofstream dataoutput;
   void initializett();
@@ -118,6 +119,7 @@ void Engine::startup() {
   Bitboards.initialize();
   EUNN.loaddefaultnet();
   EUNN.initializennue(Bitboards.Bitboards);
+  mt.seed(rd());
 }
 void initializelmr() {
   for (int i = 0; i < maxmaxdepth; i++) {
@@ -596,20 +598,22 @@ void Engine::autoplay() {
   suppressoutput = true;
   initializett();
   resethistory();
-  Bitboards.initialize();
+  int seed = mt() % 40320;
+  Bitboards.parseFEN(get8294400FEN(seed, seed));
   std::string game = "";
   std::string result = "";
-  int extra = (rand() >> 11) & 1;
+  int extra = (mt() >> 11) & 1;
   for (int i = 0; i < 7 + extra; i++) {
     int num_moves = Bitboards.generatemoves(i & 1, 0, 0);
     if (num_moves == 0) {
       suppressoutput = false;
       initializett();
       resethistory();
-      Bitboards.initialize();
+      seed = mt() % 40320;
+      Bitboards.parseFEN(get8294400FEN(seed, seed));
       return;
     }
-    int rand_move = rand() % num_moves;
+    int rand_move = mt() % num_moves;
     Bitboards.makemove(Bitboards.moves[0][rand_move], 0);
     game += algebraic(Bitboards.moves[0][rand_move]);
     game += " ";
