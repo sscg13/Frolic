@@ -4,7 +4,14 @@
 #include "incbin.h"
 
 const int nnuesize = 64;
-const int nnuefilesize = 1542 * nnuesize + 2;
+const int outputbuckets = 1;
+const int evalscale = 400;
+const int evalQA = 255;
+const int evalQB = 64;
+const int material[6] = {1, 1, 1, 1, 1, 0};
+const int bucketdivisor = 32 / outputbuckets;
+const int nnuefilesize =
+    (1538 * nnuesize + 4 * nnuesize * outputbuckets + 2 * outputbuckets);
 INCBIN(char, NNUE, EUNNfile);
 int screlu(short int x) {
   return std::pow(std::max(std::min((int)x, 255), 0), 2);
@@ -12,14 +19,12 @@ int screlu(short int x) {
 class NNUE {
   short int nnuelayer1[768][nnuesize];
   short int layer1bias[nnuesize];
-  int ourlayer2[nnuesize];
-  int theirlayer2[nnuesize];
+  int ourlayer2[outputbuckets][nnuesize];
+  int theirlayer2[outputbuckets][nnuesize];
   short int whitehidden[nnuesize];
   short int blackhidden[nnuesize];
-  int finalbias;
-  int evalscale = 400;
-  int evalQA = 255;
-  int evalQB = 64;
+  int finalbias[outputbuckets];
+  int totalmaterial;
 
 public:
   void loaddefaultnet();
@@ -51,21 +56,26 @@ void NNUE::loaddefaultnet() {
     layer1bias[i] = bias;
     offset += 2;
   }
-  for (int i = 0; i < nnuesize; i++) {
-    short int weight = 256 * (short int)(NNUEData[offset + 1]) +
-                       (short int)(unsigned char)(NNUEData[offset]);
-    ourlayer2[i] = (int)weight;
+  for (int j = 0; j < outputbuckets; j++) {
+    for (int i = 0; i < nnuesize; i++) {
+      short int weight = 256 * (short int)(NNUEData[offset + 1]) +
+                         (short int)(unsigned char)(NNUEData[offset]);
+      ourlayer2[j][i] = (int)weight;
+      offset += 2;
+    }
+    for (int i = 0; i < nnuesize; i++) {
+      short int weight = 256 * (short int)(NNUEData[offset + 1]) +
+                         (short int)(unsigned char)(NNUEData[offset]);
+      theirlayer2[j][i] = (int)weight;
+      offset += 2;
+    }
+  }
+  for (int j = 0; j < outputbuckets; j++) {
+    short int base = 256 * (short int)(NNUEData[offset + 1]) +
+                     (short int)(unsigned char)(NNUEData[offset]);
+    finalbias[j] = base;
     offset += 2;
   }
-  for (int i = 0; i < nnuesize; i++) {
-    short int weight = 256 * (short int)(NNUEData[offset + 1]) +
-                       (short int)(unsigned char)(NNUEData[offset]);
-    theirlayer2[i] = (int)weight;
-    offset += 2;
-  }
-  short int base = 256 * (short int)(NNUEData[offset + 1]) +
-                   (short int)(unsigned char)(NNUEData[offset]);
-  finalbias = base;
 }
 void NNUE::readnnuefile(std::string file) {
   std::ifstream nnueweights;
@@ -90,21 +100,26 @@ void NNUE::readnnuefile(std::string file) {
     layer1bias[i] = bias;
     offset += 2;
   }
-  for (int i = 0; i < nnuesize; i++) {
-    short int weight = 256 * (short int)(weights[offset + 1]) +
-                       (short int)(unsigned char)(weights[offset]);
-    ourlayer2[i] = (int)weight;
+  for (int j = 0; j < outputbuckets; j++) {
+    for (int i = 0; i < nnuesize; i++) {
+      short int weight = 256 * (short int)(weights[offset + 1]) +
+                         (short int)(unsigned char)(weights[offset]);
+      ourlayer2[j][i] = (int)weight;
+      offset += 2;
+    }
+    for (int i = 0; i < nnuesize; i++) {
+      short int weight = 256 * (short int)(weights[offset + 1]) +
+                         (short int)(unsigned char)(weights[offset]);
+      theirlayer2[j][i] = (int)weight;
+      offset += 2;
+    }
+  }
+  for (int j = 0; j < outputbuckets; j++) {
+    short int base = 256 * (short int)(weights[offset + 1]) +
+                     (short int)(unsigned char)(weights[offset]);
+    finalbias[j] = base;
     offset += 2;
   }
-  for (int i = 0; i < nnuesize; i++) {
-    short int weight = 256 * (short int)(weights[offset + 1]) +
-                       (short int)(unsigned char)(weights[offset]);
-    theirlayer2[i] = (int)weight;
-    offset += 2;
-  }
-  short int base = 256 * (short int)(weights[offset + 1]) +
-                   (short int)(unsigned char)(weights[offset]);
-  finalbias = base;
   delete[] weights;
   nnueweights.close();
 }
@@ -114,6 +129,7 @@ void NNUE::activatepiece(int color, int piece, int square) {
     blackhidden[i] +=
         nnuelayer1[64 * (6 * (color ^ 1) + piece) + 56 ^ square][i];
   }
+  totalmaterial += material[piece];
 }
 void NNUE::deactivatepiece(int color, int piece, int square) {
   for (int i = 0; i < nnuesize; i++) {
@@ -121,8 +137,10 @@ void NNUE::deactivatepiece(int color, int piece, int square) {
     blackhidden[i] -=
         nnuelayer1[64 * (6 * (color ^ 1) + piece) + 56 ^ square][i];
   }
+  totalmaterial -= material[piece];
 }
 void NNUE::initializennue(uint64_t *Bitboards) {
+  totalmaterial = 0;
   for (int i = 0; i < nnuesize; i++) {
     whitehidden[i] = layer1bias[i];
     blackhidden[i] = layer1bias[i];
@@ -166,16 +184,17 @@ void NNUE::backwardaccumulators(int notation) {
   }
 }
 int NNUE::evaluate(int color) {
-  int eval = finalbias * evalQA;
+  int bucket = std::min(totalmaterial / bucketdivisor, outputbuckets - 1);
+  int eval = finalbias[bucket] * evalQA;
   if (color == 0) {
     for (int i = 0; i < nnuesize; i++) {
-      eval += screlu(whitehidden[i]) * ourlayer2[i];
-      eval += screlu(blackhidden[i]) * theirlayer2[i];
+      eval += screlu(whitehidden[i]) * ourlayer2[bucket][i];
+      eval += screlu(blackhidden[i]) * theirlayer2[bucket][i];
     }
   } else {
     for (int i = 0; i < nnuesize; i++) {
-      eval += screlu(whitehidden[i]) * theirlayer2[i];
-      eval += screlu(blackhidden[i]) * ourlayer2[i];
+      eval += screlu(whitehidden[i]) * theirlayer2[bucket][i];
+      eval += screlu(blackhidden[i]) * ourlayer2[bucket][i];
     }
   }
   eval /= evalQA;
