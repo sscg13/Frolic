@@ -33,6 +33,7 @@ class NNUE {
   int ourlayer2[outputbuckets][nnuesize];
   int theirlayer2[outputbuckets][nnuesize];
   short int accumulator[inputbuckets][2][nnuesize];
+  uint64_t cachebitboards[inputbuckets][2][8];
   int finalbias[outputbuckets];
   int activebucket[2];
   int totalmaterial;
@@ -43,6 +44,7 @@ public:
   void activatepiece(int bucket, int color, int piece, int square);
   void deactivatepiece(int bucket, int color, int piece, int square);
   void refreshfromscratch(int bucket, int color, uint64_t *Bitboards);
+  void refreshfromcache(int bucket, int color, uint64_t *Bitboards);
   void initializennue(uint64_t *Bitboards);
   void forwardaccumulators(int notation, uint64_t *Bitboards);
   void backwardaccumulators(int notation, uint64_t *Bitboards);
@@ -143,11 +145,15 @@ void NNUE::activatepiece(int bucket, int color, int piece, int square) {
   for (int i = 0; i < nnuesize; i++) {
     accumulator[bucket][color][i] += nnuelayer1[bucket][64*piece + (56 * color) ^ square][i];
   }
+  cachebitboards[bucket][color][color ^ (piece / 6)] ^= (1ULL << square);
+  cachebitboards[bucket][color][2 + (piece % 6)] ^= (1ULL << square);
 }
 void NNUE::deactivatepiece(int bucket, int color, int piece, int square) {
   for (int i = 0; i < nnuesize; i++) {
     accumulator[bucket][color][i] -= nnuelayer1[bucket][64*piece + (56 * color) ^ square][i];
   }
+  cachebitboards[bucket][color][color ^ (piece / 6)] ^= (1ULL << square);
+  cachebitboards[bucket][color][2 + (piece % 6)] ^= (1ULL << square);
 }
 void NNUE::refreshfromscratch(int bucket, int color, uint64_t *Bitboards) {
   for (int i = 0; i < nnuesize; i++) {
@@ -160,6 +166,31 @@ void NNUE::refreshfromscratch(int bucket, int color, uint64_t *Bitboards) {
       int square = __builtin_popcountll((pieces & -pieces) - 1);
       activatepiece(bucket, color, (i % 6) + 6 * (color ^ (i/6)), square);
       pieces ^= (1ULL << square);
+    }
+  }
+  for (int i = 0; i < 8; i++) {
+    cachebitboards[bucket][color][i] = Bitboards[i];
+  }
+}
+void NNUE::refreshfromcache(int bucket, int color, uint64_t *Bitboards) {
+  uint64_t add[12];
+  uint64_t remove[12];
+  for (int i = 0; i < 12; i++) {
+    add[i] = (Bitboards[i/6] & Bitboards[2 + (i % 6)]) & ~(cachebitboards[bucket][color][i/6] & cachebitboards[bucket][color][2 + (i % 6)]);
+    remove[i] = (cachebitboards[bucket][color][i/6] & cachebitboards[bucket][color][2 + (i % 6)]) & ~(Bitboards[i/6] & Bitboards[2 + (i % 6)]);
+  }
+  for (int i = 0; i < 12; i++) {
+    int addcount = __builtin_popcountll(add[i]);
+    for (int j = 0; j < addcount; j++) {
+      int square = __builtin_ctzll(add[i]);
+      activatepiece(bucket, color, (i % 6) + 6 * (color ^ (i/6)), square);
+      add[i] ^= (1ULL << square);
+    }
+    int removecount = __builtin_popcountll(remove[i]);
+    for (int j = 0; j < removecount; j++) {
+      int square = __builtin_ctzll(remove[i]);
+      deactivatepiece(bucket, color, (i % 6) + 6 * (color ^ (i/6)), square);
+      remove[i] ^= (1ULL << square);
     }
   }
 }
@@ -190,9 +221,18 @@ void NNUE::forwardaccumulators(int notation, uint64_t *Bitboards) {
   if (captured > 0) {
     deactivatepiece(activebucket[color ^ 1], color ^ 1, captured - 2, to);
   }
-  if (piece == 7 && kingbuckets[to ^ (56 * color)] != kingbuckets[from ^ (56 * color)]) {
-    refreshfromscratch(kingbuckets[to ^ (56 * color)], color, Bitboards);
-    activebucket[color] = kingbuckets[to ^ (56 * color)];
+  int oldbucket = kingbuckets[from ^ (56 * color)];
+  int newbucket = kingbuckets[to ^ (56 * color)];
+  if (piece == 7 && oldbucket != newbucket) {
+    int scratchrefreshtime = __builtin_popcountll(Bitboards[0]|Bitboards[1]);
+    int cacherefreshtime = __builtin_popcountll((cachebitboards[newbucket][color][0]|cachebitboards[newbucket][color][1])^(Bitboards[0]|Bitboards[1]));
+    if (scratchrefreshtime <= cacherefreshtime) {
+      refreshfromscratch(newbucket, color, Bitboards);
+    }
+    else {
+      refreshfromcache(newbucket, color, Bitboards);
+    }
+    activebucket[color] = newbucket;
   }
   else {
     activatepiece(activebucket[color], color, piece2, to);
@@ -215,9 +255,18 @@ void NNUE::backwardaccumulators(int notation, uint64_t *Bitboards) {
   if (captured > 0) {
     activatepiece(activebucket[color^1], color ^ 1, captured - 2, to);
   }
-  if (piece == 7 && kingbuckets[to ^ (56 * color)] != kingbuckets[from ^ (56 * color)]) {
-    refreshfromscratch(kingbuckets[from ^ (56 * color)], color, Bitboards);
-    activebucket[color] = kingbuckets[from ^ (56 * color)];
+  int oldbucket = kingbuckets[to ^ (56 * color)];
+  int newbucket = kingbuckets[from ^ (56 * color)];
+  if (piece == 7 && oldbucket != newbucket) {
+    int scratchrefreshtime = __builtin_popcountll(Bitboards[0]|Bitboards[1]);
+    int cacherefreshtime = __builtin_popcountll((cachebitboards[newbucket][color][0]|cachebitboards[newbucket][color][1])^(Bitboards[0]|Bitboards[1]));
+    if (scratchrefreshtime <= cacherefreshtime) {
+      refreshfromscratch(newbucket, color, Bitboards);
+    }
+    else {
+      refreshfromcache(newbucket, color, Bitboards);
+    }
+    activebucket[color] = newbucket;
   }
   else {
     deactivatepiece(activebucket[color], color, piece2, to);
