@@ -310,11 +310,9 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     }
     if (mov == killers[ply][0]) {
       movescore[i] += 20000;
-    }
-    /*else if (moves[ply][i] == killers[ply][1]) {
-      movescore[ply][i] += 10000;
-    }*/
-    else if ((mov & 4095) == counter) {
+    } else if (mov == killers[ply][1]) {
+      movescore[i] += 10000;
+    } else if ((mov & 4095) == counter) {
       movescore[i] += 10000;
     }
     /*if (see_exceeds(moves[ply][i], color, 0)) {
