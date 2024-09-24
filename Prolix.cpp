@@ -69,12 +69,12 @@ class Engine {
   int wdlmodel(int eval);
   int normalize(int eval);
   int iterative(int color);
-  void autoplay();
+  void autoplay(int lowerbound, int upperbound);
 
 public:
   void startup();
   void bench();
-  void datagen(int n, std::string outputfile);
+  void datagen(int lowerbound, int upperbound, int n, std::string outputfile);
   void uci();
   void xboard();
 };
@@ -580,7 +580,7 @@ int Engine::iterative(int color) {
   bestmove = bestmove1;
   return returnedscore;
 }
-void Engine::autoplay() {
+void Engine::autoplay(int lowerbound, int upperbound) {
   suppressoutput = true;
   initializett();
   resethistory();
@@ -627,10 +627,13 @@ void Engine::autoplay() {
       scores[maxmove] = score * (1 - 2 * color);
       maxmove++;
     }
-    /*if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) && (checkers(color) ==
-    0ULL) && (abs(score) < 200) && (abs(score) > 100)) { bookoutput << getFEN()
-    << "\n";
-    }*/
+    if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) &&
+        (Bitboards.checkers(color) == 0ULL) && (abs(score) <= upperbound) &&
+        (abs(score) >= lowerbound)) {
+      dataoutput << Bitboards.getFEN() << "\n";
+      finished = true;
+      result = "0.5";
+    }
     if (bestmove == 0) {
       std::cout << "Null best move? mitigating by using proper null move \n";
       Bitboards.makenullmove();
@@ -663,27 +666,33 @@ void Engine::autoplay() {
     } else if (Bitboards.gamelength >= 900) {
       finished = true;
       result = "0.5";
+    } else if (maxmove >= 30 && lowerbound <= upperbound) {
+      finished = true;
+      result = "0.5";
     }
     if (useNNUE && bestmove > 0) {
       EUNN.forwardaccumulators(bestmove);
     }
   }
-  for (int i = 0; i < maxmove; i++) {
-    dataoutput << fens[i] << " | " << scores[i] << " | " << result << "\n";
+  if (lowerbound > upperbound) {
+    for (int i = 0; i < maxmove; i++) {
+      dataoutput << fens[i] << " | " << scores[i] << " | " << result << "\n";
+    }
   }
   suppressoutput = false;
   initializett();
   resethistory();
   Bitboards.initialize();
 }
-void Engine::datagen(int n, std::string outputfile) {
+void Engine::datagen(int lowerbound, int upperbound, int n,
+                     std::string outputfile) {
   dataoutput.open(outputfile, std::ofstream::app);
   softnodelimit = 16384;
   hardnodelimit = 65536;
   softtimelimit = 0;
   hardtimelimit = 0;
   for (int i = 0; i < n; i++) {
-    autoplay();
+    autoplay(lowerbound, upperbound);
     std::cout << i << "\n";
   }
   dataoutput.close();
@@ -1175,13 +1184,39 @@ int main(int argc, char *argv[]) {
     }
     if (std::string(argv[1]) == "datagen") {
       if (argc < 5) {
-        std::cerr << "Too few arguments given";
+        std::cerr << "Proper usage: ./(exe) datagen threads games outputfile";
         return 0;
       }
       int threads = atoi(argv[2]);
       int games = atoi(argv[3]);
-      std::cout << "Generating with " << threads << " threads x " << games
-                << " games:\n";
+      std::cout << "Generating NNUE data with " << threads << " threads x "
+                << games << " games:\n";
+      std::vector<std::thread> datagenerators(threads);
+      std::vector<Engine> Engines(threads);
+      for (int i = 0; i < threads; i++) {
+        std::string outputfile =
+            std::string(argv[4]) + std::to_string(i) + ".txt";
+        Engines[i].startup();
+        datagenerators[i] = std::thread(&Engine::datagen, &Engines[i], 30000,
+                                        -30000, games, outputfile);
+      }
+      for (auto &thread : datagenerators) {
+        thread.join();
+      }
+      return 0;
+    }
+    if (std::string(argv[1]) == "bookgen") {
+      if (argc < 7) {
+        std::cerr << "Proper usage: ./(exe) bookgen threads games outputfile "
+                     "low high";
+        return 0;
+      }
+      int threads = atoi(argv[2]);
+      int games = atoi(argv[3]);
+      int lowerbound = atoi(argv[5]);
+      int upperbound = atoi(argv[6]);
+      std::cout << "Generating book with lower bound " << lowerbound
+                << " and upper bound " << upperbound << "\n";
       std::vector<std::thread> datagenerators(threads);
       std::vector<Engine> Engines(threads);
       for (int i = 0; i < threads; i++) {
@@ -1189,7 +1224,8 @@ int main(int argc, char *argv[]) {
             std::string(argv[4]) + std::to_string(i) + ".txt";
         Engines[i].startup();
         datagenerators[i] =
-            std::thread(&Engine::datagen, &Engines[i], games, outputfile);
+            std::thread(&Engine::datagen, &Engines[i], lowerbound, upperbound,
+                        games, outputfile);
       }
       for (auto &thread : datagenerators) {
         thread.join();
