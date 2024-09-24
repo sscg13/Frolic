@@ -50,8 +50,13 @@ class Engine {
   bool suppressoutput = false;
   int maxdepth = 32;
   abinfo searchstack[64];
+  int pvtable[maxmaxdepth][maxmaxdepth + 1];
   int bestmove = 0;
   int movetime = 0;
+  int softnodelimit = 0;
+  int hardnodelimit = 0;
+  int softtimelimit = 0;
+  int hardtimelimit = 0;
   std::random_device rd;
   std::mt19937 mt;
   std::ofstream dataoutput;
@@ -60,11 +65,10 @@ class Engine {
   void resethistory();
   int movestrength(int mov, int color);
   int quiesce(int alpha, int beta, int color, int depth);
-  int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp,
-                int nodelimit, int timelimit);
+  int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp);
   int wdlmodel(int eval);
   int normalize(int eval);
-  int iterative(int nodelimit, int softtimelimit, int hardtimelimit, int color);
+  int iterative(int color);
   void autoplay();
 
 public:
@@ -111,6 +115,11 @@ void Engine::resethistory() {
   for (int i = 0; i < 32; i++) {
     killers[i][0] = 0;
     killers[i][1] = 0;
+  }
+  for (int i = 0; i < maxmaxdepth; i++) {
+    for (int j = 0; j < maxmaxdepth + 1; j++) {
+      pvtable[i][j] = 0;
+    }
   }
 }
 void Engine::startup() {
@@ -204,7 +213,7 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
   return bestscore;
 }
 int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
-                      bool nmp, int nodelimit, int timelimit) {
+                      bool nmp) {
   if (Bitboards.repetitions() > 1) {
     return 0;
   }
@@ -278,7 +287,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     Bitboards.makenullmove();
     searchstack[ply].playedmove = 0;
     score = -alphabeta(std::max(0, depth - 2 - (depth + 1) / 3), ply + 1, -beta,
-                       1 - beta, color ^ 1, false, nodelimit, timelimit);
+                       1 - beta, color ^ 1, false);
     Bitboards.unmakenullmove();
     if (score >= beta) {
       return beta;
@@ -349,18 +358,17 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
       }
       if (nullwindow) {
         score = -alphabeta(depth - 1 - r, ply + 1, -alpha - 1, -alpha,
-                           color ^ 1, true, nodelimit, timelimit);
+                           color ^ 1, true);
         if (score > alpha && r > 0) {
           score = -alphabeta(depth - 1, ply + 1, -alpha - 1, -alpha, color ^ 1,
-                             true, nodelimit, timelimit);
+                             true);
         }
         if (score > alpha && score < beta) {
-          score = -alphabeta(depth - 1, ply + 1, -beta, -alpha, color ^ 1, true,
-                             nodelimit, timelimit);
+          score =
+              -alphabeta(depth - 1, ply + 1, -beta, -alpha, color ^ 1, true);
         }
       } else {
-        score = -alphabeta(depth - 1, ply + 1, -beta, -alpha, color ^ 1, true,
-                           nodelimit, timelimit);
+        score = -alphabeta(depth - 1, ply + 1, -beta, -alpha, color ^ 1, true);
       }
       Bitboards.unmakemove(mov);
       if (useNNUE) {
@@ -409,17 +417,22 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
         if (ply == 0) {
           bestmove = mov;
         }
+        pvtable[ply][ply + 1] = mov;
+        pvtable[ply][0] = pvtable[ply + 1][0] ? pvtable[ply + 1][0] : ply + 2;
+        for (int j = ply + 2; j < pvtable[ply][0]; j++) {
+          pvtable[ply][j] = pvtable[ply + 1][j];
+        }
         bestmove1 = i;
         bestscore = score;
       }
-      if (Bitboards.nodecount > nodelimit) {
+      if (Bitboards.nodecount > hardnodelimit && hardnodelimit > 0) {
         stopsearch = true;
       }
-      if (depth > 3) {
+      if ((Bitboards.nodecount & 1023) == 0) {
         auto now = std::chrono::steady_clock::now();
         auto timetaken =
             std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
-        if (timetaken.count() > timelimit) {
+        if (timetaken.count() > hardtimelimit && hardtimelimit > 0) {
           stopsearch = true;
         }
       }
@@ -451,8 +464,7 @@ int Engine::normalize(int eval) {
   double a = (((as[0] * m + as[1]) * m + as[2]) * m) + as[3];
   return round(100 * eval / a);
 }
-int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
-                      int color) {
+int Engine::iterative(int color) {
   Bitboards.nodecount = 0;
   stopsearch = false;
   start = std::chrono::steady_clock::now();
@@ -460,7 +472,6 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
   int returnedscore = score;
   int depth = 1;
   int bestmove1 = 0;
-  int pvtable[maxdepth];
   resethistory();
   while (!stopsearch) {
     bestmove = -1;
@@ -469,8 +480,7 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
     int beta = score + delta;
     bool fail = true;
     while (fail) {
-      int score1 = alphabeta(depth, 0, alpha, beta, color, false, nodelimit,
-                             hardtimelimit);
+      int score1 = alphabeta(depth, 0, alpha, beta, color, false);
       if (score1 >= beta) {
         beta += delta;
         delta += delta;
@@ -485,35 +495,10 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
     auto now = std::chrono::steady_clock::now();
     auto timetaken =
         std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
-    if (Bitboards.nodecount < nodelimit && timetaken.count() < hardtimelimit &&
+    if ((Bitboards.nodecount < hardnodelimit || hardnodelimit <= 0) &&
+        (timetaken.count() < hardtimelimit || hardtimelimit <= 0) &&
         depth < maxdepth && bestmove >= 0) {
       returnedscore = score;
-      int last = depth;
-      int pvcolor = color;
-      bool stop = false;
-      for (int i = 0; i < depth; i++) {
-        int index = Bitboards.zobristhash % TTsize;
-        stop = true;
-        if (TT[index].key == Bitboards.zobristhash && TT[index].nodetype == 3) {
-          int movcount = Bitboards.generatemoves(pvcolor, 0, 0);
-          for (int j = 0; j < movcount; j++) {
-            if (Bitboards.moves[0][j] == TT[index].hashmove) {
-              stop = false;
-            }
-          }
-        }
-        if (stop) {
-          last = i;
-          i = depth;
-        } else {
-          pvcolor ^= 1;
-          pvtable[i] = TT[index].hashmove;
-          Bitboards.makemove(TT[index].hashmove, 1);
-        }
-      }
-      for (int i = last - 1; i >= 0; i--) {
-        Bitboards.unmakemove(pvtable[i]);
-      }
       if (proto == "uci" && !suppressoutput) {
         if (abs(score) <= 27000) {
           int normalscore = normalize(score);
@@ -528,8 +513,8 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
                       << lossrate;
           }
           std::cout << " pv ";
-          for (int i = 0; i < last; i++) {
-            std::cout << algebraic(pvtable[i]) << " ";
+          for (int i = 1; i < pvtable[0][0]; i++) {
+            std::cout << algebraic(pvtable[0][i]) << " ";
           }
           std::cout << "\n";
         } else {
@@ -548,8 +533,8 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
             std::cout << " wdl " << winrate << " 0 " << lossrate;
           }
           std::cout << " pv ";
-          for (int i = 0; i < last; i++) {
-            std::cout << algebraic(pvtable[i]) << " ";
+          for (int i = 1; i < pvtable[0][0]; i++) {
+            std::cout << algebraic(pvtable[0][i]) << " ";
           }
           std::cout << "\n";
         }
@@ -557,8 +542,8 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
       if (proto == "xboard") {
         std::cout << depth << " " << score << " " << timetaken.count() / 10
                   << " " << Bitboards.nodecount << " ";
-        for (int i = 0; i < last; i++) {
-          std::cout << algebraic(pvtable[i]) << " ";
+        for (int i = 1; i < pvtable[0][0]; i++) {
+          std::cout << algebraic(pvtable[0][i]) << " ";
         }
         std::cout << "\n";
       }
@@ -570,15 +555,16 @@ int Engine::iterative(int nodelimit, int softtimelimit, int hardtimelimit,
     } else {
       stopsearch = true;
     }
-    if (timetaken.count() > softtimelimit) {
+    if ((timetaken.count() > softtimelimit && softtimelimit > 0) ||
+        (Bitboards.nodecount > softnodelimit && softnodelimit > 0)) {
       stopsearch = true;
     }
   }
   auto now = std::chrono::steady_clock::now();
   auto timetaken =
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
-  if (timetaken.count() > 0 && (proto == "uci") && !suppressoutput) {
-    int nps = 1000 * (Bitboards.nodecount / timetaken.count());
+  if (proto == "uci" && !suppressoutput) {
+    int nps = 1000 * (Bitboards.nodecount / std::max(1LL, timetaken.count()));
     std::cout << "info nodes " << Bitboards.nodecount << " nps " << nps << "\n";
   }
   if (proto == "uci" && !suppressoutput) {
@@ -634,7 +620,7 @@ void Engine::autoplay() {
   bool finished = false;
   while (!finished) {
     int color = Bitboards.position & 1;
-    int score = iterative(65536, 50, 50, color);
+    int score = iterative(color);
     if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) &&
         (Bitboards.checkers(color) == 0ULL) && (abs(score) < 27000)) {
       fens[maxmove] = Bitboards.getFEN();
@@ -692,6 +678,10 @@ void Engine::autoplay() {
 }
 void Engine::datagen(int n, std::string outputfile) {
   dataoutput.open(outputfile, std::ofstream::app);
+  softnodelimit = 16384;
+  hardnodelimit = 65536;
+  softtimelimit = 0;
+  hardtimelimit = 0;
   for (int i = 0; i < n; i++) {
     autoplay();
     std::cout << i << "\n";
@@ -718,11 +708,15 @@ void Engine::bench() {
   maxdepth = 14;
   auto commence = std::chrono::steady_clock::now();
   int nodes = 0;
+  softnodelimit = 0;
+  hardnodelimit = 0;
+  softtimelimit = 0;
+  hardtimelimit = 0;
   for (int i = 0; i < 14; i++) {
     startup();
     Bitboards.parseFEN(benchfens[i]);
     int color = Bitboards.position & 1;
-    iterative(1000000000, 120000, 120000, color);
+    iterative(color);
     nodes += Bitboards.nodecount;
   }
   auto conclude = std::chrono::steady_clock::now();
@@ -876,13 +870,16 @@ void Engine::uci() {
       binc = sum;
     }
     int color = Bitboards.position & 1;
+    softnodelimit = 0;
+    hardnodelimit = 0;
     if (color == 0) {
-      int score =
-          iterative(1000000000, wtime / 40 + winc / 3, wtime / 10 + winc, 0);
+      softtimelimit = wtime / 40 + winc / 3;
+      hardtimelimit = wtime / 10 + winc;
     } else {
-      int score =
-          iterative(1000000000, btime / 40 + binc / 3, btime / 10 + binc, 1);
+      softtimelimit = btime / 40 + binc / 3;
+      hardtimelimit = btime / 10 + binc;
     }
+    int score = iterative(color);
   }
   if (ucicommand.substr(0, 11) == "go movetime") {
     int sum = 0;
@@ -894,7 +891,11 @@ void Engine::uci() {
       reader--;
     }
     int color = Bitboards.position & 1;
-    int score = iterative(1000000000, sum, sum, color);
+    softnodelimit = 0;
+    hardnodelimit = 0;
+    softtimelimit = sum;
+    hardtimelimit = sum;
+    int score = iterative(color);
   }
   if (ucicommand.substr(0, 8) == "go nodes") {
     int sum = 0;
@@ -906,11 +907,37 @@ void Engine::uci() {
       reader--;
     }
     int color = Bitboards.position & 1;
-    int score = iterative(sum, 120000, 120000, color);
+    softnodelimit = sum;
+    hardnodelimit = sum;
+    softtimelimit = 0;
+    hardtimelimit = 0;
+    int score = iterative(color);
   }
   if (ucicommand.substr(0, 11) == "go infinite") {
     int color = Bitboards.position & 1;
-    int score = iterative(1000000000, 120000, 120000, color);
+    softnodelimit = 0;
+    hardnodelimit = 0;
+    softtimelimit = 0;
+    hardtimelimit = 0;
+    int score = iterative(color);
+  }
+  if (ucicommand.substr(0, 8) == "go depth") {
+    int sum = 0;
+    int add = 1;
+    int reader = ucicommand.length() - 1;
+    while (ucicommand[reader] != ' ') {
+      sum += ((int)(ucicommand[reader] - 48)) * add;
+      add *= 10;
+      reader--;
+    }
+    int color = Bitboards.position & 1;
+    softnodelimit = 0;
+    hardnodelimit = 0;
+    softtimelimit = 0;
+    hardtimelimit = 0;
+    maxdepth = sum + 1;
+    int score = iterative(color);
+    maxdepth = maxmaxdepth;
   }
   if (ucicommand.substr(0, 8) == "go perft") {
     start = std::chrono::steady_clock::now();
@@ -1046,13 +1073,13 @@ void Engine::xboard() {
       add *= 10;
       reader--;
     }
-    movetime = sum / 16;
+    softtimelimit = sum / 48;
+    hardtimelimit = sum / 16;
   }
   if (xcommand.substr(0, 7) == "level 0") {
     int reader = 8;
     int sum1 = 0;
     int sum2 = 0;
-    movetime = 0;
     int add = 60000;
     while ((xcommand[reader] != ' ') && (xcommand[reader] != ':')) {
       reader++;
@@ -1089,7 +1116,8 @@ void Engine::xboard() {
     if (incenti) {
       sum2 /= 100;
     }
-    movetime = sum1 / 10 + sum2;
+    softtimelimit = sum1 / 40 + sum2 / 3;
+    hardtimelimit = sum1 / 10 + sum2;
   }
   if (xcommand.substr(0, 4) == "ping") {
     int sum = 0;
@@ -1118,13 +1146,17 @@ void Engine::xboard() {
       }
       if (gosent) {
         int color = Bitboards.position & 1;
-        int score = iterative(1000000000, movetime / 3, movetime, color);
+        softnodelimit = 0;
+        hardnodelimit = 0;
+        int score = iterative(color);
       }
     }
   }
   if (xcommand == "go") {
     int color = Bitboards.position & 1;
-    int score = iterative(1000000000, movetime / 3, movetime, color);
+    softnodelimit = 0;
+    hardnodelimit = 0;
+    int score = iterative(color);
     gosent = true;
   }
 }
