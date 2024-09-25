@@ -214,6 +214,7 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
 }
 int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
                       bool nmp) {
+  pvtable[ply][0] = ply + 1;
   if (Bitboards.repetitions() > 1) {
     return 0;
   }
