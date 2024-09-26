@@ -37,6 +37,8 @@ struct abinfo {
 class Engine {
   Board Bitboards;
   int historytable[2][6][64];
+  int *conthist1 = new int[294912];
+  int *conthist2 = new int[294912];
   int capthist[2][6][6];
   int TTsize = 1048576;
   std::vector<TTentry> TT;
@@ -44,7 +46,6 @@ class Engine {
   bool showWDL = true;
   NNUE EUNN;
   int killers[32][2];
-  int countermoves[6][64];
   bool gosent = false;
   bool stopsearch = false;
   bool suppressoutput = false;
@@ -63,7 +64,7 @@ class Engine {
   void initializett();
   void updatett(int index, int depth, int score, int nodetype, int hashmove);
   void resethistory();
-  int movestrength(int mov, int color);
+  int movestrength(int mov, int color, int mov2, int mov3);
   int quiesce(int alpha, int beta, int color, int depth);
   int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp);
   int wdlmodel(int eval);
@@ -105,7 +106,6 @@ void Engine::resethistory() {
     for (int j = 0; j < 64; j++) {
       historytable[0][i][j] = 0;
       historytable[1][i][j] = 0;
-      countermoves[i][j] = 0;
     }
     for (int j = 0; j < 6; j++) {
       capthist[0][i][j] = 0;
@@ -120,6 +120,10 @@ void Engine::resethistory() {
     for (int j = 0; j < maxmaxdepth + 1; j++) {
       pvtable[i][j] = 0;
     }
+  }
+  for (int i = 0; i < 294912; i++) {
+    conthist1[i] = 0;
+    conthist2[i] = 0;
   }
 }
 void Engine::startup() {
@@ -138,17 +142,32 @@ void initializelmr() {
     }
   }
 }
-int Engine::movestrength(int mov, int color) {
+int conthistindex(int color, int mov1, int mov2) {
+  int to1 = (mov1 >> 6) & 63;
+  int piece1 = ((mov1 >> 13) & 7) - 2;
+  int to2 = (mov2 >> 6) & 63;
+  int piece2 = ((mov2 >> 13) & 7) - 2;
+  return to2 + 64 * piece2 + 384 * to1 + 24576 * piece1 + 147456 * color;
+}
+int Engine::movestrength(int mov, int color, int mov2, int mov3) {
   int to = (mov >> 6) & 63;
   int piece = (mov >> 13) & 7;
   int captured = (mov >> 17) & 7;
   int promoted = (mov >> 21) & 3;
+  int score = 0;
   if (captured) {
-    return 10000 * captured + 12000 * promoted + 10000 - 1000 * piece +
-           capthist[color][piece - 2][captured - 2];
+    score = 10000 * captured + 12000 * promoted + 10000 - 1000 * piece +
+            capthist[color][piece - 2][captured - 2];
   } else {
-    return 60000 * promoted + historytable[color][piece - 2][to];
+    score = 60000 * promoted + historytable[color][piece - 2][to];
   }
+  if (mov2 > 0) {
+    score += conthist1[conthistindex(color, mov2, mov)];
+  }
+  if (mov3 > 0) {
+    score += conthist2[conthistindex(color, mov3, mov)];
+  }
+  return score;
 }
 int Engine::quiesce(int alpha, int beta, int color, int depth) {
   int score = useNNUE ? EUNN.evaluate(color) : Bitboards.evaluate(color);
@@ -177,8 +196,9 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
   if (depth < 1) {
     for (int i = 0; i < movcount - 1; i++) {
       for (int j = i + 1;
-           movestrength(Bitboards.moves[maxdepth + depth][j], color) >
-               movestrength(Bitboards.moves[maxdepth + depth][j - 1], color) &&
+           movestrength(Bitboards.moves[maxdepth + depth][j], color, 0, 0) >
+               movestrength(Bitboards.moves[maxdepth + depth][j - 1], color, 0,
+                            0) &&
            j > 0;
            j--) {
         std::swap(Bitboards.moves[maxdepth + depth][j],
@@ -245,8 +265,14 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   int staticeval = useNNUE ? EUNN.evaluate(color) : Bitboards.evaluate(color);
   searchstack[ply].eval = staticeval;
   bool improving = false;
+  int previousmove = 0;
+  int followupmove = 0;
+  if (ply > 0) {
+    previousmove = searchstack[ply - 1].playedmove;
+  }
   if (ply > 1) {
     improving = (staticeval > searchstack[ply - 2].eval);
+    followupmove = searchstack[ply - 2].playedmove;
   }
   int quiets = 0;
   if (TT[index].key == Bitboards.zobristhash) {
@@ -300,23 +326,13 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
           return alpha;
       }
   }*/
-  int counter = 0;
-  int previousmove = 0;
-  int previouspiece = 0;
-  int previoussquare = 0;
-  if (ply > 0 && nmp) {
-    previousmove = searchstack[ply - 1].playedmove;
-    previouspiece = (previousmove >> 13) & 7;
-    previoussquare = (previousmove >> 6) & 63;
-    counter = countermoves[previouspiece - 2][previoussquare];
-  }
   int movescore[256];
   for (int i = 0; i < movcount; i++) {
     int mov = Bitboards.moves[ply][i];
     if (mov == ttmove) {
       movescore[i] = (1 << 20);
     } else {
-      movescore[i] = movestrength(mov, color);
+      movescore[i] = movestrength(mov, color, previousmove, followupmove);
     }
     if (mov == killers[ply][0]) {
       movescore[i] += 20000;
@@ -324,9 +340,6 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     /*else if (moves[ply][i] == killers[ply][1]) {
       movescore[ply][i] += 10000;
     }*/
-    else if ((mov & 4095) == counter) {
-      movescore[i] += 10000;
-    }
     /*if (see_exceeds(moves[ply][i], color, 0)) {
         movescore[ply][i]+=15000;
     }*/
@@ -407,8 +420,19 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
                     (depth * 3);
               }
             }
-            if (ply > 0 && nmp && !iscapture(mov)) {
-              countermoves[previouspiece - 2][previoussquare] = (mov & 4095);
+            if (previousmove > 0) {
+              conthist1[conthistindex(color, previousmove, mov)] +=
+                  (depth * depth -
+                   (depth * depth *
+                    conthist1[conthistindex(color, previousmove, mov)] /
+                    27000));
+            }
+            if (followupmove > 0) {
+              conthist2[conthistindex(color, followupmove, mov)] +=
+                  (depth * depth -
+                   (depth * depth *
+                    conthist2[conthistindex(color, followupmove, mov)] /
+                    27000));
             }
             return score;
           }
