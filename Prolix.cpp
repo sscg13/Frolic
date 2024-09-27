@@ -160,12 +160,12 @@ int Engine::movestrength(int mov, int color, int mov2, int mov3) {
             capthist[color][piece - 2][captured - 2];
   } else {
     score = 60000 * promoted + historytable[color][piece - 2][to];
-  }
-  if (mov2 > 0) {
-    score += conthist1[conthistindex(color, mov2, mov)];
-  }
-  if (mov3 > 0) {
-    score += conthist2[conthistindex(color, mov3, mov)];
+    if (mov2 > 0) {
+      score += conthist1[conthistindex(color, mov2, mov)];
+    }
+    if (mov3 > 0) {
+      score += conthist2[conthistindex(color, mov3, mov)];
+    }
   }
   return score;
 }
@@ -420,14 +420,14 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
                     (depth * 3);
               }
             }
-            if (previousmove > 0) {
+            if (previousmove > 0 && captured == 0) {
               conthist1[conthistindex(color, previousmove, mov)] +=
                   (depth * depth -
                    (depth * depth *
                     conthist1[conthistindex(color, previousmove, mov)] /
                     27000));
             }
-            if (followupmove > 0) {
+            if (followupmove > 0 && captured == 0) {
               conthist2[conthistindex(color, followupmove, mov)] +=
                   (depth * depth -
                    (depth * depth *
