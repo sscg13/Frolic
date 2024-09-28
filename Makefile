@@ -1,5 +1,5 @@
 EXE := Prolix
-EVALFILE := shatranj-net8.nnue
+EVALFILE := shatranj-net9.nnue
 
 SOURCES := Prolix.cpp
 
