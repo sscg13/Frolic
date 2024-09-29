@@ -4,7 +4,7 @@
 #include "incbin.h"
 
 const int nnuesize = 64;
-const int outputbuckets = 1;
+const int outputbuckets = 8;
 const int evalscale = 400;
 const int evalQA = 255;
 const int evalQB = 64;
