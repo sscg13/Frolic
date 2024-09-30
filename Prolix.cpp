@@ -161,10 +161,10 @@ int Engine::movestrength(int mov, int color, int mov2, int mov3) {
   } else {
     score = 60000 * promoted + historytable[color][piece - 2][to];
     if (mov2 > 0) {
-      score += conthist1[conthistindex(color, mov2, mov)] / 3;
+      score += conthist1[conthistindex(color, mov2, mov)];
     }
     if (mov3 > 0) {
-      score += conthist2[conthistindex(color, mov3, mov)] / 2;
+      score += conthist2[conthistindex(color, mov3, mov)];
     }
   }
   return score;
@@ -413,13 +413,6 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
                    (depth * depth * historytable[color][piece - 2][target]) /
                        27000);
             }
-            for (int j = 0; j < i; j++) {
-              int mov2 = Bitboards.moves[ply][j];
-              if (!iscapture(mov2)) {
-                historytable[color][((mov2 >> 13) & 7) - 2][(mov2 >> 6) & 63] -=
-                    (depth * 3);
-              }
-            }
             if (previousmove > 0 && captured == 0) {
               conthist1[conthistindex(color, previousmove, mov)] +=
                   (depth * depth -
@@ -433,6 +426,21 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
                    (depth * depth *
                     conthist2[conthistindex(color, followupmove, mov)] /
                     27000));
+            }
+            for (int j = 0; j < i; j++) {
+              int mov2 = Bitboards.moves[ply][j];
+              if (!iscapture(mov2)) {
+                historytable[color][((mov2 >> 13) & 7) - 2][(mov2 >> 6) & 63] -=
+                    (depth * 3);
+                if (previousmove > 0) {
+                  conthist1[conthistindex(color, previousmove, mov2)] -=
+                      (1 + depth);
+                }
+                if (followupmove > 0) {
+                  conthist2[conthistindex(color, followupmove, mov2)] -=
+                      (1 + depth);
+                }
+              }
             }
             return score;
           }
