@@ -434,11 +434,11 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
                     (depth * 3);
                 if (previousmove > 0) {
                   conthist1[conthistindex(color, previousmove, mov2)] -=
-                      (1 + depth);
+                      (depth * 3);
                 }
                 if (followupmove > 0) {
                   conthist2[conthistindex(color, followupmove, mov2)] -=
-                      (1 + depth);
+                      (depth * 3);
                 }
               }
             }
