@@ -1,6 +1,6 @@
 Currently, this project contains three separate versions of the engine for three different variants:
   -
-  Chess - _TBD_
+  Chess - _Frolic_
   
   Shatranj - _Prolix_
   
