@@ -4,8 +4,8 @@
 #include <bit>
 #include <chrono>
 #include <fstream>
-#include <time.h>
 #include <thread>
+#include <time.h>
 using U64 = uint64_t;
 using namespace std;
 
@@ -300,11 +300,10 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   for (int i = 0; i < movcount; i++) {
     bool nullwindow = (i > 0);
     int mov = Bitboards.moves[ply][i];
-    int r = (Bitboards.movescore[ply][i] < 30000)
+    int r = (movescore[i] < 30000)
                 ? std::min(depth - 1, lmr_reductions[depth][i])
                 : 0;
-    r = std::max(0,
-                 r - (incheck || isPV) - Bitboards.movescore[ply][i] / 16384);
+    r = std::max(0, r - (incheck || isPV) - movescore[i] / 16384);
     int e = (movcount == 1) ? 1 : 0;
     // bool prune = ((beta-alpha < 2) && (depth < 5) && (i > 6+4*depth) &&
     // movescore[depth][i] < 1000);
@@ -507,7 +506,8 @@ void Engine::autoplay() {
     int rand_move = 0;
     while (!sound) {
       int rand_move = mt() % num_moves;
-      sound = (Bitboards.checkers(i & 1) != 0ULL || Bitboards.see_exceeds(Bitboards.moves[0][rand_move], i&1, 0));
+      sound = (Bitboards.checkers(i & 1) != 0ULL ||
+               Bitboards.see_exceeds(Bitboards.moves[0][rand_move], i & 1, 0));
     }
     Bitboards.makemove(Bitboards.moves[0][rand_move], 0);
     game += algebraic(Bitboards.moves[0][rand_move]);
@@ -552,8 +552,7 @@ void Engine::autoplay() {
       finished = true;
       if (Bitboards.checkers(color ^ 1) == 0ULL) {
         result = "0.5";
-      }
-      else {
+      } else {
         if (color == 0) {
           result = "1.0";
         } else {
@@ -579,8 +578,7 @@ void Engine::autoplay() {
   resethistory();
   Bitboards.initialize();
 }
-void Engine::datagen(int n,
-                     std::string outputfile) {
+void Engine::datagen(int n, std::string outputfile) {
   dataoutput.open(outputfile, std::ofstream::app);
   softnodelimit = 4096;
   hardnodelimit = 65536;
@@ -980,7 +978,8 @@ int main(int argc, char *argv[]) {
         std::string outputfile =
             std::string(argv[4]) + std::to_string(i) + ".txt";
         Engines[i].startup();
-        datagenerators[i] = std::thread(&Engine::datagen, &Engines[i], games, outputfile);
+        datagenerators[i] =
+            std::thread(&Engine::datagen, &Engines[i], games, outputfile);
       }
       for (auto &thread : datagenerators) {
         thread.join();
