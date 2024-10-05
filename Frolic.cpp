@@ -46,7 +46,7 @@ class Engine {
   bool suppressoutput = false;
   int maxdepth = maxmaxdepth;
   abinfo searchstack[64];
-  int pvtable[maxmaxdepth][maxmaxdepth + 1];
+  int pvtable[maxmaxdepth + 1][maxmaxdepth + 1];
   int bestmove = 0;
   int movetime = 0;
   int softnodelimit = 0;
