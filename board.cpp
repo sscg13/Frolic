@@ -1367,7 +1367,7 @@ std::string Board::getFEN() {
   FEN = FEN + " ";
   int epsquare = (position >> 8) & 63;
   if (epsquare) {
-    FEN = FEN + algebraic(epsquare) + " ";
+    FEN = FEN + coordinate(epsquare) + " ";
   }
   else {
     FEN = FEN + "- ";
