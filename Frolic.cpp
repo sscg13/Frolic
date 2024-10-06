@@ -505,7 +505,7 @@ void Engine::autoplay() {
     bool sound = false;
     int rand_move = 0;
     while (!sound) {
-      int rand_move = mt() % num_moves;
+      rand_move = mt() % num_moves;
       sound = (Bitboards.checkers(i & 1) != 0ULL ||
                Bitboards.see_exceeds(Bitboards.moves[0][rand_move], i & 1, 0));
     }
