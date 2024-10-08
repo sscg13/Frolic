@@ -488,28 +488,33 @@ void Engine::autoplay() {
   suppressoutput = true;
   initializett();
   resethistory();
-  int seed = mt() % 40320;
-  Bitboards.parseFEN(get8294400FEN(seed, seed));
+  Bitboards.initialize();
   std::string game = "";
   std::string result = "";
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 12; i++) {
     int num_moves = Bitboards.generatemoves(i & 1, 0, 0);
     if (num_moves == 0) {
       suppressoutput = false;
       initializett();
       resethistory();
-      seed = mt() % 40320;
-      Bitboards.parseFEN(get8294400FEN(seed, seed));
+      Bitboards.initialize();
       return;
     }
     bool sound = false;
+    int qsearcheval = quiesce(-29000, 29000, i & 1, 0);
     int rand_move = 0;
+    int tried = 0;
     while (!sound) {
       rand_move = mt() % num_moves;
-      sound = (Bitboards.checkers(i & 1) != 0ULL ||
-               Bitboards.see_exceeds(Bitboards.moves[0][rand_move], i & 1, 0));
+      Bitboards.makemove(Bitboards.moves[0][rand_move], 1);
+      if (-quiesce(-29000, 29000, 1 - (i & 1), 0) >=
+          qsearcheval - 100 - tried * tried) {
+        sound = true;
+      } else {
+        Bitboards.unmakemove(Bitboards.moves[0][rand_move]);
+        tried++;
+      }
     }
-    Bitboards.makemove(Bitboards.moves[0][rand_move], 0);
     game += algebraic(Bitboards.moves[0][rand_move]);
     game += " ";
   }
