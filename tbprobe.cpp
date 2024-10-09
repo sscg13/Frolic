@@ -1856,6 +1856,18 @@ int probe_table(const Pos *pos, int s, int *success, const int type)
 
 static int probe_wdl_table(const Pos *pos, int *success)
 {
+  //Check for the bare king rule, since we do not have 3-men TBs
+  if (popcount(pos->white | pos->black) == 2) return 0;
+  if (popcount(pos->white) == 1) {
+    if (pos->turn == BLACK) return 2;
+    if (popcount(pos->black) > 2) return -2;
+    return 2*popcount(king_attacks(lsb(pos->white)) & ~king_attacks(lsb(pos->black & pos->kings)) & pos->black)-2;
+  }
+  if (popcount(pos->black) == 1) {
+    if (pos->turn == WHITE) return 2;
+    if (popcount(pos->white) > 2) return -2;
+    return 2*popcount(king_attacks(lsb(pos->black)) & ~king_attacks(lsb(pos->white & pos->kings)) & pos->white)-2;
+  }
   return probe_table(pos, 0, success, WDL);
 }
 
@@ -1918,7 +1930,6 @@ static int probe_ab(const Pos *pos, int alpha, int beta, int *success)
 int probe_wdl(Pos *pos, int *success)
 {
   *success = 1;
-
   // Generate (at least) all legal captures including (under)promotions.
   TbMove moves0[TB_MAX_CAPTURES];
   TbMove *m = moves0;
