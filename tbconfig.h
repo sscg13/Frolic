@@ -127,7 +127,7 @@
  * Define TB_BISHOP_ATTACKS(square, occ) to return the bishop attacks bitboard
  * for a bishop at `square' assuming the given `occ' occupancy bitboard.
  */
- #define TB_BISHOP_ATTACKS(square, occ)   (((square & 0xfcfcfcfcfcfcfcfc) << 14) | ((square & 0xfcfcfcfcfcfcfcfc) >> 18) | ((square & 0x3f3f3f3f3f3f3f3f) << 18) | ((square & 0x3f3f3f3f3f3f3f3f) >> 14))
+ #define TB_BISHOP_ATTACKS(square, occ)   ((((1ULL << square) & 0xfcfcfcfcfcfcfcfc) << 14) | (((1ULL << square) & 0xfcfcfcfcfcfcfcfc) >> 18) | (((1ULL << square) & 0x3f3f3f3f3f3f3f3f) << 18) | (((1ULL << square) & 0x3f3f3f3f3f3f3f3f) >> 14))
 
 /*
  * Define TB_QUEEN_ATTACKS(square, occ) to return the queen attacks bitboard
@@ -135,7 +135,7 @@
  * NOTE: If no definition is provided then tbprobe will use:
  *       TB_ROOK_ATTACKS(square, occ) | TB_BISHOP_ATTACKS(square, occ)
  */
- #define TB_QUEEN_ATTACKS(square, occ)  (((((square & 0xfefefefefefefefe) >> 1) | ((square & 0x7f7f7f7f7f7f7f7f) << 1)) >> 8) | ((((square & 0xfefefefefefefefe) >> 1) | ((square & 0x7f7f7f7f7f7f7f7f) << 1)) << 8))
+ #define TB_QUEEN_ATTACKS(square, occ)  ((((((1ULL << square) & 0xfefefefefefefefe) >> 1) | (((1ULL << square) & 0x7f7f7f7f7f7f7f7f) << 1)) >> 8) | (((((1ULL << square) & 0xfefefefefefefefe) >> 1) | (((1ULL << square) & 0x7f7f7f7f7f7f7f7f) << 1)) << 8))
 
 /*
  * Define TB_PAWN_ATTACKS(square, color) to return the pawn attacks bitboard
