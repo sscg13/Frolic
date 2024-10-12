@@ -6,18 +6,19 @@
 #include <thread>
 #include <time.h>
 std::string proto = "uci";
+//clang-format off
 std::string uciinfostring =
-    "id name Prolix \nid author sscg13 \noption name UCI_Variant type combo "
-    "default shatranj var shatranj \noption name Threads type spin default 1 "
-    "min 1 max 1 \noption name Hash type spin default 32 min 1 max 1024 "
-    "\noption name Use NNUE type check default true \noption name EvalFile "
-    "type string default <internal> \noption name UCI_ShowWDL type check "
-    "default true \nuciok\n";
-// 1 bit color, 7 bits halfmove
-// 6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1 bit
-// castling, 1 bit double pawn push, 1 bit en passant, 1 bit promotion, 2 bits
-// promoted piece, 1 bit capture, 3 bits piece captured 26 bits total for now?
+    "id name Prolix \nid author sscg13 \n"
+    "option name UCI_Variant type combo default shatranj var shatranj \n"
+    "option name Threads type spin default 1 min 1 max 1 \n"
+    "option name Hash type spin default 32 min 1 max 1024 \n"
+    "option name Use NNUE type check default true \n"
+    "option name EvalFile type string default <internal> \n"
+    "option name UCI_ShowWDL type check default true \n"
+    "option name SyzygyPath type string default <empty> \nuciok\n";
+//clang-format on
 const int maxmaxdepth = 32;
+const int maxtbpieces = 5;
 int lmr_reductions[maxmaxdepth][256];
 auto start = std::chrono::steady_clock::now();
 std::ifstream datainput;
@@ -48,6 +49,8 @@ class Engine {
   bool gosent = false;
   bool stopsearch = false;
   bool suppressoutput = false;
+  bool rootinTB = false;
+  bool useTB = false;
   int maxdepth = 32;
   abinfo searchstack[64];
   int pvtable[maxmaxdepth + 1][maxmaxdepth + 1];
@@ -230,6 +233,16 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   if (depth <= 0 || ply >= maxdepth) {
     return quiesce(alpha, beta, color, 0);
   }
+  int tbwdl = 0;
+  bool fewpieces =
+      (__builtin_popcountll(Bitboards.Bitboards[0] | Bitboards.Bitboards[1]) <=
+       maxtbpieces);
+  if (fewpieces && useTB) {
+    tbwdl = Bitboards.probetbwdl();
+    if (!rootinTB) {
+      return tbwdl * (26000 - ply);
+    }
+  }
   int score = -30000;
   int bestscore = -30000;
   int allnode = 0;
@@ -268,14 +281,14 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     } else {
       int margin = std::max(40, 70 * (depth - ttdepth - improving));
       if (((nodetype & 1) && (score - margin >= beta)) &&
-          (abs(beta) < 27000 && !incheck) && (ply > 0)) {
+          (abs(beta) < 20000 && !incheck) && (ply > 0)) {
         return (score + beta) / 2;
       }
     }
   }
   int margin = std::max(40, 70 * (depth - improving));
   if (ply > 0 && score == -30000) {
-    if (staticeval - margin >= beta && (abs(beta) < 27000 && !incheck)) {
+    if (staticeval - margin >= beta && (abs(beta) < 20000 && !incheck)) {
       return (staticeval + beta) / 2;
     }
   }
@@ -350,6 +363,13 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
       r = std::min(depth - 1, lmr_reductions[depth][i]);
     }
     r = std::max(0, r - isPV - improving);
+    if (fewpieces && useTB) {
+      Bitboards.makemove(mov, true);
+      if (Bitboards.probetbwdl() != -tbwdl) {
+        prune = true;
+      }
+      Bitboards.unmakemove(mov);
+    }
     int e = (movcount == 1);
     if (!stopsearch && !prune) {
       Bitboards.makemove(mov, true);
@@ -456,7 +476,7 @@ int Engine::wdlmodel(int eval) {
   return int(0.5 + 1000 / (1 + exp((a - double(eval)) / b)));
 }
 int Engine::normalize(int eval) {
-  if (abs(eval) == 27000) {
+  if (abs(eval) >= 25000) {
     return eval;
   }
   int material = Bitboards.material();
@@ -473,12 +493,18 @@ int Engine::iterative(int color) {
   int returnedscore = score;
   int depth = 1;
   int bestmove1 = 0;
+  int tbscore = 0;
   resethistory();
+  rootinTB = (__builtin_popcountll(Bitboards.Bitboards[0] |
+                                   Bitboards.Bitboards[1]) <= maxtbpieces);
+  if (rootinTB && useTB) {
+    tbscore = Bitboards.probetbwdl();
+  }
   while (!stopsearch) {
     bestmove = -1;
     int delta = 30;
-    int alpha = score - delta;
-    int beta = score + delta;
+    int alpha = returnedscore - delta;
+    int beta = returnedscore + delta;
     bool fail = true;
     while (fail) {
       int score1 = alphabeta(depth, 0, alpha, beta, color, false);
@@ -500,6 +526,9 @@ int Engine::iterative(int color) {
         (timetaken.count() < hardtimelimit || hardtimelimit <= 0) &&
         depth < maxdepth && bestmove >= 0) {
       returnedscore = score;
+      if (rootinTB && useTB && abs(score) < 27000) {
+        score = 26000 * tbscore;
+      }
       if (proto == "uci" && !suppressoutput) {
         if (abs(score) <= 27000) {
           int normalscore = normalize(score);
@@ -1007,6 +1036,15 @@ void Engine::uci() {
         EUNN.readnnuefile(nnuefile);
         EUNN.initializennue(Bitboards.Bitboards);
         std::cout << "info string using nnue file " << nnuefile << "\n";
+      }
+    }
+    if (option == "SyzygyPath") {
+      std::string tbpath = ucicommand.substr(32, ucicommand.length() - 32);
+      useTB = (tbpath != "<empty>");
+      if (!tb_init(tbpath.c_str())) {
+        std::cout << "info error initializing Syzygy TBs \n";
+      } else if (useTB) {
+        std::cout << "info string successful init Syzygy TBs \n";
       }
     }
     if (option == "UCI_ShowWDL") {
