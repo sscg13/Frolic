@@ -849,13 +849,11 @@ static bool is_legal(const Pos *pos)
     unsigned sq = lsb(king);
     if (king_attacks(sq) & (pos->kings & them))
         return false;
-    uint64_t ratt = rook_attacks(sq, occ);
-    uint64_t batt = bishop_attacks(sq, occ);
-    if (ratt & (pos->rooks & them))
+    if (rook_attacks(sq, occ) & (pos->rooks & them))
         return false;
-    if (batt & (pos->bishops & them))
+    if (bishop_attacks(sq, occ) & (pos->bishops & them))
         return false;
-    if ((ratt | batt) & (pos->queens & them))
+    if (queen_attacks(sq, occ) & (pos->queens & them))
         return false;
     if (knight_attacks(sq) & (pos->knights & them))
         return false;
@@ -875,13 +873,11 @@ static bool is_check(const Pos *pos)
     uint64_t king = pos->kings & us;
     assert(king != 0);
     unsigned sq = lsb(king);
-    uint64_t ratt = rook_attacks(sq, occ);
-    uint64_t batt = bishop_attacks(sq, occ);
-    if (ratt & (pos->rooks & them))
+    if (rook_attacks(sq, occ) & (pos->rooks & them))
         return true;
-    if (batt & (pos->bishops & them))
+    if (bishop_attacks(sq, occ) & (pos->bishops & them))
         return true;
-    if ((ratt | batt) & (pos->queens & them))
+    if (queen_attacks(sq, occ) & (pos->queens & them))
         return true;
     if (knight_attacks(sq) & (pos->knights & them))
         return true;
