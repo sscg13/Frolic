@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <iostream>
 #include <random>
-#include "tbprobe.h"
+#include "external/Fathom/tbprobe.h"
 using U64 = uint64_t;
 const U64 FileA = 0x0101010101010101;
 const U64 FileB = FileA << 1;

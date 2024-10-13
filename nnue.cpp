@@ -1,7 +1,7 @@
 #include <cmath>
 #include <fstream>
 #define INCBIN_PREFIX
-#include "incbin.h"
+#include "external/incbin/incbin.h"
 
 const int nnuesize = 64;
 const int outputbuckets = 8;
