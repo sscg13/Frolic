@@ -16,8 +16,8 @@ The default NNUE file is indicated in the Makefile. If you wish to compile with 
 Prolix optionally includes support for (Shatranj) Syzygy tablebases (downloadable at ftp://chessdb:chessdb@ftp.chessdb.cn/pub/syzygy/shatranj/). Currently only WDL probing is supported.
 
 ## How to read evaluations
-A score of `270.00` or `mate x` indicates a forced win. The exact mate distance may not be accurate.
+A score of `+270.00` or `mate x` indicates a forced win. The exact mate distance may not be accurate.
 
-A score of `259.xy` or `260.00` indicates a tablebase win. This does not take 70 move rule into account.
+A score of `+259.xy` or `+260.00` indicates a tablebase win. This does not take 70 move rule into account.
 
 All other evaluations are **normalized**. A score of `+1.00` corresponds to an estimated win probability of 50%. 
