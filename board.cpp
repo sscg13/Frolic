@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iostream>
 #include <random>
+#include "external/Fathom/tbprobe.h"
 using U64 = uint64_t;
 const U64 FileA = 0x0101010101010101;
 const U64 FileB = FileA << 1;
@@ -260,6 +261,7 @@ public:
   std::string getFEN();
   int evaluate(int color);
   bool see_exceeds(int mov, int color, int threshold);
+  int probetbwdl();
 };
 
 U64 Board::scratchzobrist() {
@@ -1172,4 +1174,8 @@ bool Board::see_exceeds(int mov, int color, int threshold) {
     pieces[i][next[i]]--;
     i ^= 1;
   }
+}
+int Board::probetbwdl() {
+  auto wdl = tb_probe_wdl(Bitboards[0], Bitboards[1], Bitboards[7], Bitboards[4], Bitboards[6], Bitboards[3], Bitboards[5], Bitboards[2], 0U, 0U, 0U, ((position & 1) == 0));
+  return (wdl > 2) - (wdl < 2);
 }
