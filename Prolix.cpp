@@ -35,7 +35,7 @@ class Engine {
   Board Bitboards;
   int historytable[2][6][64];
   int capthist[2][6][6];
-  int TTsize = 1048576;
+  int TTsize = 2097152;
   std::vector<TTentry> TT;
   bool useNNUE = true;
   bool showWDL = true;
@@ -1018,7 +1018,7 @@ void Engine::uci() {
       }
       if (sum <= 1024) {
         int oldTTsize = TTsize;
-        TTsize = 32768 * sum;
+        TTsize = 65536 * sum;
         TT.resize(TTsize);
         TT.shrink_to_fit();
       }
