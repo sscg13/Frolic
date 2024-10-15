@@ -88,7 +88,7 @@ void Engine::updatett(int index, int depth, int score, int nodetype,
                       int hashmove) {
   if (index < TTsize) {
     TT[index].key = Bitboards.zobristhash;
-    TT[index].data = (U64)((short int)score);
+    TT[index].data = (U64)((unsigned short int)score);
     TT[index].data |= (((U64)hashmove) << 16);
     TT[index].data |= (((U64)nodetype) << 42);
     TT[index].data |= (((U64)Bitboards.gamelength) << 44);
