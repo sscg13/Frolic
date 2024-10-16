@@ -25,11 +25,7 @@ std::ifstream datainput;
 std::string inputfile;
 struct TTentry {
   U64 key;
-  int score;
-  int depth;
-  int age;
-  int nodetype;
-  int hashmove;
+  U64 data;
 };
 struct abinfo {
   int playedmove;
@@ -39,7 +35,7 @@ class Engine {
   Board Bitboards;
   int historytable[2][6][64];
   int capthist[2][6][6];
-  int TTsize = 1048576;
+  int TTsize = 2097152;
   std::vector<TTentry> TT;
   bool useNNUE = true;
   bool showWDL = true;
@@ -85,22 +81,18 @@ void Engine::initializett() {
   TT.resize(TTsize);
   for (int i = 0; i < TTsize; i++) {
     TT[i].key = (U64)i + 1ULL;
-    TT[i].score = 0;
-    TT[i].depth = 0;
-    TT[i].age = 0;
-    TT[i].nodetype = 0;
-    TT[i].hashmove = 0;
+    TT[i].data = 0;
   }
 }
 void Engine::updatett(int index, int depth, int score, int nodetype,
                       int hashmove) {
   if (index < TTsize) {
     TT[index].key = Bitboards.zobristhash;
-    TT[index].depth = depth;
-    TT[index].age = Bitboards.gamelength;
-    TT[index].hashmove = hashmove;
-    TT[index].nodetype = nodetype;
-    TT[index].score = score;
+    TT[index].data = (U64)((unsigned short int)score);
+    TT[index].data |= (((U64)hashmove) << 16);
+    TT[index].data |= (((U64)nodetype) << 42);
+    TT[index].data |= (((U64)Bitboards.gamelength) << 44);
+    TT[index].data |= (((U64)depth) << 54);
   }
 }
 void Engine::resethistory() {
@@ -250,8 +242,9 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   int index = Bitboards.zobristhash % TTsize;
   int ttmove = 0;
   int bestmove1 = -1;
-  int ttdepth = TT[index].depth;
-  int ttage = std::max(Bitboards.gamelength - TT[index].age, 0);
+  int ttdepth = (int)(TT[index].data >> 54) & 63;
+  int ttage =
+      std::max(Bitboards.gamelength - ((int)(TT[index].data >> 44) & 1023), 0);
   bool update = (depth >= (ttdepth - ttage / 3));
   bool incheck = (Bitboards.checkers(color) != 0ULL);
   bool isPV = (beta - alpha > 1);
@@ -263,9 +256,9 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   }
   int quiets = 0;
   if (TT[index].key == Bitboards.zobristhash) {
-    score = TT[index].score;
-    ttmove = TT[index].hashmove;
-    int nodetype = TT[index].nodetype;
+    score = (int)(short int)(TT[index].data & 0x000000000000FFFF);
+    ttmove = (int)(TT[index].data >> 16) & 0x03FFFFFF;
+    int nodetype = (int)(TT[index].data >> 42) & 3;
     if (ttdepth >= depth) {
       if (!isPV && Bitboards.repetitions() == 0) {
         if (nodetype == 3) {
@@ -1025,7 +1018,7 @@ void Engine::uci() {
       }
       if (sum <= 1024) {
         int oldTTsize = TTsize;
-        TTsize = 32768 * sum;
+        TTsize = 65536 * sum;
         TT.resize(TTsize);
         TT.shrink_to_fit();
       }
