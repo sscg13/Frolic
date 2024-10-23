@@ -68,12 +68,14 @@ class Engine {
   int wdlmodel(int eval);
   int normalize(int eval);
   int iterative(int color);
-  void autoplay(int lowerbound, int upperbound);
+  void datagenautoplay();
+  void bookgenautoplay(int lowerbound, int upperbound);
 
 public:
   void startup();
   void bench();
-  void datagen(int lowerbound, int upperbound, int n, std::string outputfile);
+  void datagen(int n, std::string outputfile);
+  void bookgen(int lowerbound, int upperbound, int n, std::string outputfile);
   void uci();
   void xboard();
 };
@@ -603,7 +605,7 @@ int Engine::iterative(int color) {
   bestmove = bestmove1;
   return returnedscore;
 }
-void Engine::autoplay(int lowerbound, int upperbound) {
+void Engine::datagenautoplay() {
   suppressoutput = true;
   initializett();
   resethistory();
@@ -650,13 +652,6 @@ void Engine::autoplay(int lowerbound, int upperbound) {
       scores[maxmove] = score * (1 - 2 * color);
       maxmove++;
     }
-    if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) &&
-        (Bitboards.checkers(color) == 0ULL) && (abs(score) <= upperbound) &&
-        (abs(score) >= lowerbound)) {
-      dataoutput << Bitboards.getFEN() << "\n";
-      finished = true;
-      result = "0.5";
-    }
     if (bestmove == 0) {
       std::cout << "Null best move? mitigating by using proper null move \n";
       Bitboards.makenullmove();
@@ -689,17 +684,79 @@ void Engine::autoplay(int lowerbound, int upperbound) {
     } else if (Bitboards.gamelength >= 900) {
       finished = true;
       result = "0.5";
-    } else if (maxmove >= 30 && lowerbound <= upperbound) {
-      finished = true;
-      result = "0.5";
     }
     if (useNNUE && bestmove > 0) {
       EUNN.forwardaccumulators(bestmove);
     }
   }
-  if (lowerbound > upperbound) {
-    for (int i = 0; i < maxmove; i++) {
-      dataoutput << fens[i] << " | " << scores[i] << " | " << result << "\n";
+  for (int i = 0; i < maxmove; i++) {
+    dataoutput << fens[i] << " | " << scores[i] << " | " << result << "\n";
+  }
+  suppressoutput = false;
+  initializett();
+  resethistory();
+  Bitboards.initialize();
+}
+void Engine::bookgenautoplay(int lowerbound, int upperbound) {
+  suppressoutput = true;
+  initializett();
+  resethistory();
+  int seed = mt() % 40320;
+  Bitboards.parseFEN(get8294400FEN(seed, seed));
+  for (int i = 0; i < 8; i++) {
+    int num_moves = Bitboards.generatemoves(i & 1, 0, 0);
+    if (num_moves == 0) {
+      suppressoutput = false;
+      initializett();
+      resethistory();
+      seed = mt() % 40320;
+      Bitboards.parseFEN(get8294400FEN(seed, seed));
+      return;
+    }
+    int rand_move = mt() % num_moves;
+    Bitboards.makemove(Bitboards.moves[0][rand_move], 0);
+  }
+  if (useNNUE) {
+    EUNN.initializennue(Bitboards.Bitboards);
+  }
+  if (Bitboards.generatemoves(0, 0, 0) == 0) {
+    suppressoutput = false;
+    initializett();
+    resethistory();
+    Bitboards.initialize();
+    return;
+  }
+  bool finished = false;
+  while (!finished) {
+    int color = Bitboards.position & 1;
+    softnodelimit = color ? 4096 : 16384;
+    int score = iterative(color);
+    if ((bestmove > 0) && (((bestmove >> 16) & 1) == 0) &&
+        (Bitboards.checkers(color) == 0ULL) && (abs(score) <= upperbound) &&
+        (abs(score) >= lowerbound)) {
+      dataoutput << Bitboards.getFEN() << "\n";
+      std::cout << "success\n";
+      finished = true;
+    }
+    if (bestmove == 0) {
+      std::cout << "Null best move? mitigating by using proper null move \n";
+      Bitboards.makenullmove();
+    } else {
+      Bitboards.makemove(bestmove, 0);
+      if (useNNUE) {
+        EUNN.forwardaccumulators(bestmove);
+      }
+    }
+    if (Bitboards.twokings()) {
+      finished = true;
+    } else if (Bitboards.bareking(color)) {
+      finished = true;
+    } else if (Bitboards.repetitions() >= 2) {
+      finished = true;
+    } else if (Bitboards.generatemoves(color ^ 1, 0, 0) == 0) {
+      finished = true;
+    } else if (Bitboards.material() < 32) {
+      finished = true;
     }
   }
   suppressoutput = false;
@@ -707,18 +764,28 @@ void Engine::autoplay(int lowerbound, int upperbound) {
   resethistory();
   Bitboards.initialize();
 }
-void Engine::datagen(int lowerbound, int upperbound, int n,
-                     std::string outputfile) {
+void Engine::datagen(int n, std::string outputfile) {
   dataoutput.open(outputfile, std::ofstream::app);
   softnodelimit = 16384;
   hardnodelimit = 65536;
   softtimelimit = 0;
   hardtimelimit = 0;
   for (int i = 0; i < n; i++) {
-    autoplay(lowerbound, upperbound);
+    datagenautoplay();
     std::cout << i << "\n";
   }
   dataoutput.close();
+}
+void Engine::bookgen(int lowerbound, int upperbound, int n,
+                     std::string outputfile) {
+  dataoutput.open(outputfile, std::ofstream::app);
+  hardnodelimit = 65536;
+  softtimelimit = 0;
+  hardtimelimit = 0;
+  for (int i = 0; i < n; i++) {
+    bookgenautoplay(lowerbound, upperbound);
+    std::cout << i << "\n";
+  }
 }
 void Engine::bench() {
   std::string benchfens[14] = {
@@ -1230,8 +1297,8 @@ int main(int argc, char *argv[]) {
         std::string outputfile =
             std::string(argv[4]) + std::to_string(i) + ".txt";
         Engines[i].startup();
-        datagenerators[i] = std::thread(&Engine::datagen, &Engines[i], 30000,
-                                        -30000, games, outputfile);
+        datagenerators[i] =
+            std::thread(&Engine::datagen, &Engines[i], games, outputfile);
       }
       for (auto &thread : datagenerators) {
         thread.join();
@@ -1257,7 +1324,7 @@ int main(int argc, char *argv[]) {
             std::string(argv[4]) + std::to_string(i) + ".txt";
         Engines[i].startup();
         datagenerators[i] =
-            std::thread(&Engine::datagen, &Engines[i], lowerbound, upperbound,
+            std::thread(&Engine::bookgen, &Engines[i], lowerbound, upperbound,
                         games, outputfile);
       }
       for (auto &thread : datagenerators) {
