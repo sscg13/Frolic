@@ -1,7 +1,7 @@
+#include "external/Fathom/tbprobe.h"
 #include <algorithm>
 #include <iostream>
 #include <random>
-#include "external/Fathom/tbprobe.h"
 using U64 = uint64_t;
 const U64 FileA = 0x0101010101010101;
 const U64 FileB = FileA << 1;
@@ -220,6 +220,79 @@ std::string get8294400FEN(int seed1, int seed2) {
     rank1.erase(rank1.begin() + (seed2 % i));
     seed2 /= i;
   }
+  FEN += " w - - 0 1";
+  return FEN;
+}
+std::string backrow(int seed, bool black) {
+  int triangle1[5] = {-12, 0, 1, 2, 4};
+  int orders[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+  char rank[9] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '\0'};
+  int location = 2 + 4 * (seed % 2);
+  rank[location] = black ? 'b' : 'B';
+  orders[location] = 0;
+  for (int i = location + 1; i < 8; i++) {
+    orders[i] = std::max(orders[i] - 1, 0);
+  }
+  seed /= 2;
+  location = 1 + 4 * (seed % 2);
+  rank[location] = black ? 'b' : 'B';
+  orders[location] = 0;
+  for (int i = location + 1; i < 8; i++) {
+    orders[i] = std::max(orders[i] - 1, 0);
+  }
+  seed /= 2;
+  int aux = -1;
+  for (int i = 0; i < 8; i += 2) {
+    if (orders[i] > 0) {
+      aux++;
+      if (aux == seed % 3) {
+        location = i;
+      }
+    }
+  }
+  rank[location] = black ? 'q' : 'Q';
+  orders[location] = 0;
+  for (int i = location + 1; i < 8; i++) {
+    orders[i] = std::max(orders[i] - 1, 0);
+  }
+  seed /= 3;
+  aux = -1;
+  for (int i = 0; i < 8; i++) {
+    if (orders[i] > 0) {
+      aux++;
+      if (aux == seed % 5) {
+        location = i;
+      }
+    }
+  }
+  rank[location] = black ? 'k' : 'K';
+  orders[location] = 0;
+  for (int i = location + 1; i < 8; i++) {
+    orders[i] = std::max(orders[i] - 1, 0);
+  }
+  seed /= 5;
+  for (int i = 0; i < 7; i++) {
+    for (int j = i + 1; j < 8; j++) {
+      if (triangle1[orders[i]] + triangle1[orders[j]] == seed + 1) {
+        rank[i] = black ? 'n' : 'N';
+        rank[j] = black ? 'n' : 'N';
+        orders[i] = 0;
+        orders[j] = 0;
+      }
+    }
+  }
+  for (int i = 0; i < 8; i++) {
+    if (orders[i] > 0) {
+      rank[i] = black ? 'r' : 'R';
+    }
+  }
+  std::string output = rank;
+  return output;
+}
+std::string get129600FEN(int seed1, int seed2) {
+  std::string FEN = backrow(seed1, 1);
+  FEN += "/pppppppp/8/8/8/8/PPPPPPPP/";
+  FEN += backrow(seed2, 0);
   FEN += " w - - 0 1";
   return FEN;
 }
@@ -1176,6 +1249,9 @@ bool Board::see_exceeds(int mov, int color, int threshold) {
   }
 }
 int Board::probetbwdl() {
-  auto wdl = tb_probe_wdl(Bitboards[0], Bitboards[1], Bitboards[7], Bitboards[4], Bitboards[6], Bitboards[3], Bitboards[5], Bitboards[2], 0U, 0U, 0U, ((position & 1) == 0));
+  auto wdl =
+      tb_probe_wdl(Bitboards[0], Bitboards[1], Bitboards[7], Bitboards[4],
+                   Bitboards[6], Bitboards[3], Bitboards[5], Bitboards[2], 0U,
+                   0U, 0U, ((position & 1) == 0));
   return (wdl > 2) - (wdl < 2);
 }
