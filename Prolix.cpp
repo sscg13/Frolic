@@ -170,17 +170,14 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
     }
     movcount = Bitboards.generatemoves(color, 1, maxdepth + depth);
   }
-
-  if (depth < 1) {
-    for (int i = 0; i < movcount - 1; i++) {
-      for (int j = i + 1;
-           movestrength(Bitboards.moves[maxdepth + depth][j], color) >
-               movestrength(Bitboards.moves[maxdepth + depth][j - 1], color) &&
-           j > 0;
-           j--) {
-        std::swap(Bitboards.moves[maxdepth + depth][j],
-                  Bitboards.moves[maxdepth + depth][j - 1]);
-      }
+  for (int i = 0; i < movcount - 1; i++) {
+    for (int j = i + 1;
+         movestrength(Bitboards.moves[maxdepth + depth][j], color) >
+             movestrength(Bitboards.moves[maxdepth + depth][j - 1], color) &&
+         j > 0;
+         j--) {
+      std::swap(Bitboards.moves[maxdepth + depth][j],
+                Bitboards.moves[maxdepth + depth][j - 1]);
     }
   }
   for (int i = 0; i < movcount; i++) {
