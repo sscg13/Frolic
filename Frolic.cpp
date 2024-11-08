@@ -10,13 +10,14 @@ using U64 = uint64_t;
 using namespace std;
 
 std::string proto = "none";
+//clang-format off
 std::string uciinfostring =
-    "id name Frolic \nid author sscg13 \noption name Threads type spin default "
-    "1 "
-    "min 1 max 1 \noption name Hash type spin default 32 min 1 max 1024 "
-    "\noption name Use NNUE type check default true \noption name EvalFile "
-    "type string default <internal> \nuciok\n";
-
+    "id name Frolic\n"
+    "id author sscg13\n"
+    "option name Threads type spin default 1 min 1 max 1\n"
+    "option name Hash type spin default 32 min 1 max 1024\n"
+    "uciok\n";
+//clang-format on
 const int maxmaxdepth = 32;
 int lmr_reductions[maxmaxdepth][256];
 auto start = std::chrono::steady_clock::now();
@@ -38,7 +39,6 @@ class Engine {
   int historytable[2][6][64];
   int TTsize = 1048576;
   std::vector<TTentry> TT;
-  bool useNNUE = true;
   NNUE EUNN;
   int killers[maxmaxdepth][2];
   bool gosent = false;
@@ -133,7 +133,7 @@ int Engine::movestrength(int mov, int color) {
          historytable[color][piece - 2][to];
 }
 int Engine::quiesce(int alpha, int beta, int color, int depth) {
-  int score = useNNUE ? EUNN.evaluate(color) : Bitboards.evaluate(color);
+  int score = EUNN.evaluate(color);
   int bestscore = -30000;
   int movcount;
   if (depth > 4) {
@@ -172,14 +172,10 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
     bool good = (incheck || Bitboards.see_exceeds(mov, color, 0));
     if (good) {
       Bitboards.makemove(mov, 1);
-      if (useNNUE) {
-        EUNN.forwardaccumulators(mov);
-      }
+      EUNN.forwardaccumulators(mov);
       score = -quiesce(-beta, -alpha, color ^ 1, depth + 1);
       Bitboards.unmakemove(mov);
-      if (useNNUE) {
-        EUNN.backwardaccumulators(mov);
-      }
+      EUNN.backwardaccumulators(mov);
       if (score >= beta) {
         return score;
       }
@@ -219,7 +215,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   int ttage = std::max(Bitboards.gamelength - TT[index].age, 0);
   bool update = (depth >= (ttdepth - ttage / 3));
   bool isPV = (beta - alpha > 1);
-  int staticeval = useNNUE ? EUNN.evaluate(color) : Bitboards.evaluate(color);
+  int staticeval = EUNN.evaluate(color);
   bool incheck = (Bitboards.checkers(color) != 0ULL);
   searchstack[ply].incheck = incheck;
   searchstack[ply].eval = staticeval;
@@ -309,9 +305,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     // movescore[depth][i] < 1000);
     if (!stopsearch) {
       Bitboards.makemove(mov, true);
-      if (useNNUE) {
-        EUNN.forwardaccumulators(mov);
-      }
+      EUNN.forwardaccumulators(mov);
       if (nullwindow) {
         score = -alphabeta(depth - 1 - r, ply + 1, -alpha - 1, -alpha,
                            color ^ 1, true);
@@ -328,9 +322,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
             -alphabeta(depth - 1 + e, ply + 1, -beta, -alpha, color ^ 1, true);
       }
       Bitboards.unmakemove(mov);
-      if (useNNUE) {
-        EUNN.backwardaccumulators(mov);
-      }
+      EUNN.backwardaccumulators(mov);
       if (score > bestscore) {
         if (score > alpha) {
           if (score >= beta) {
@@ -387,7 +379,7 @@ int Engine::iterative(int color) {
   Bitboards.nodecount = 0;
   stopsearch = false;
   start = std::chrono::steady_clock::now();
-  int score = useNNUE ? EUNN.evaluate(color) : Bitboards.evaluate(color);
+  int score = EUNN.evaluate(color);
   int returnedscore = score;
   int depth = 1;
   int bestmove1 = 0;
@@ -477,9 +469,7 @@ int Engine::iterative(int color) {
   if (proto == "xboard") {
     std::cout << "move " << algebraic(bestmove1) << "\n";
     Bitboards.makemove(bestmove1, 0);
-    if (useNNUE) {
-      EUNN.forwardaccumulators(bestmove1);
-    }
+    EUNN.forwardaccumulators(bestmove1);
   }
   bestmove = bestmove1;
   return returnedscore;
@@ -518,9 +508,7 @@ void Engine::autoplay() {
     game += algebraic(Bitboards.moves[0][rand_move]);
     game += " ";
   }
-  if (useNNUE) {
-    EUNN.initializennue(Bitboards.Bitboards);
-  }
+  EUNN.initializennue(Bitboards.Bitboards);
   if (Bitboards.generatemoves(0, 0, 0) == 0) {
     suppressoutput = false;
     initializett();
@@ -571,7 +559,7 @@ void Engine::autoplay() {
       finished = true;
       result = "0.5";
     }
-    if (useNNUE && bestmove > 0) {
+    if (bestmove > 0) {
       EUNN.forwardaccumulators(bestmove);
     }
   }
@@ -817,17 +805,6 @@ void Engine::uci() {
     }
     Bitboards.perftnobulk(sum, sum, color);
   }
-  if (ucicommand.substr(0, 23) == "setoption name EvalFile") {
-    std::string nnuefile = ucicommand.substr(30, ucicommand.length() - 30);
-
-    if (nnuefile == "<empty>") {
-      useNNUE = false;
-    } else if (nnuefile != "<internal>") {
-      EUNN.readnnuefile(nnuefile);
-      EUNN.initializennue(Bitboards.Bitboards);
-      std::cout << "info string using nnue file " << nnuefile << "\n";
-    }
-  }
   if (ucicommand.substr(0, 3) == "see") {
     std::string mov = ucicommand.substr(4, ucicommand.length() - 4);
     int color = Bitboards.position & 1;
@@ -942,9 +919,7 @@ void Engine::xboard() {
     }
     if (played >= 0) {
       Bitboards.makemove(Bitboards.moves[0][played], false);
-      if (useNNUE) {
-        EUNN.forwardaccumulators(Bitboards.moves[0][played]);
-      }
+      EUNN.forwardaccumulators(Bitboards.moves[0][played]);
       if (gosent) {
         int color = Bitboards.position & 1;
         softnodelimit = 0;
