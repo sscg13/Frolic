@@ -144,7 +144,7 @@ int Engine::movestrength(int mov, int color) {
     return 10000 * captured + 12000 * promoted +
            capthist[color][piece - 2][captured - 2];
   } else {
-    return 60000 * promoted + historytable[color][piece - 2][to];
+    return historytable[color][piece - 2][to];
   }
 }
 int Engine::quiesce(int alpha, int beta, int color, int depth) {
