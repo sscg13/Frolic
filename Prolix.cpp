@@ -139,10 +139,8 @@ int Engine::movestrength(int mov, int color) {
   int to = (mov >> 6) & 63;
   int piece = (mov >> 13) & 7;
   int captured = (mov >> 17) & 7;
-  int promoted = (mov >> 21) & 3;
   if (captured) {
-    return 10000 * captured + 12000 * promoted +
-           capthist[color][piece - 2][captured - 2];
+    return 10000 * captured + capthist[color][piece - 2][captured - 2];
   } else {
     return historytable[color][piece - 2][to];
   }
