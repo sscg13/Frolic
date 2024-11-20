@@ -353,7 +353,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
       /*if (quiets > 7*depth) {
         prune = true;
       }*/
-      r = std::min(depth - 1, lmr_reductions[depth][i]);
+      r = std::min(depth - 1, lmr_reductions[depth][quiets]);
     }
     r = std::max(0, r - isPV - improving);
     if (fewpieces && useTB) {
