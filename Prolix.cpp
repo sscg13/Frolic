@@ -131,7 +131,7 @@ void initializelmr() {
   for (int i = 0; i < maxmaxdepth; i++) {
     for (int j = 0; j < 256; j++) {
       lmr_reductions[i][j] =
-          (i == 0 || j == 0) ? 0 : floor(0.59 + log(i) * log(j) * 0.46);
+          (i == 0 || j == 0) ? 0 : floor(0.77 + log(i) * log(j) * 0.46);
     }
   }
 }
