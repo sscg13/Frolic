@@ -302,7 +302,7 @@ bool Board::insufficientmaterial() {
     return false;
   }
   U64 minors = Bitboards[3] | Bitboards[4];
-  return minors & (minors - 1);
+  return (__builtin_popcountll(minors) < 2);
 }
 U64 Board::checkers(int color) {
   int kingsquare = __builtin_popcountll((Bitboards[color] & Bitboards[7]) - 1);
