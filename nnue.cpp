@@ -3,7 +3,7 @@
 #define INCBIN_PREFIX
 #include "incbin.h"
 
-const int nnuesize = 16;
+const int nnuesize = 64;
 const int outputbuckets = 1;
 const int evalscale = 400;
 const int evalQA = 255;
