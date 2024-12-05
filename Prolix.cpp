@@ -274,13 +274,13 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     } else {
       int margin = std::max(40, 70 * (depth - ttdepth - improving));
       if (((nodetype & 1) && (score - margin >= beta)) &&
-          (abs(beta) < 20000 && !incheck) && (ply > 0)) {
+          (abs(beta) < 20000 && !incheck) && !isPV) {
         return (score + beta) / 2;
       }
     }
   }
   int margin = std::max(40, 70 * (depth - improving));
-  if (ply > 0 && score == -30000) {
+  if (!isPV && score == -30000) {
     if (staticeval - margin >= beta && (abs(beta) < 20000 && !incheck)) {
       return (staticeval + beta) / 2;
     }
