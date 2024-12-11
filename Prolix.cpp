@@ -452,8 +452,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
       }
     }
   }
-  if ((update && !stopsearch) &&
-      ((bestmove1 >= 0) && (abs(bestscore) < 29000))) {
+  if (((update || allnode) && !stopsearch) && (abs(bestscore) < 29000)) {
     updatett(index, depth, bestscore, 2 + allnode,
              Bitboards.moves[ply][bestmove1]);
   }
