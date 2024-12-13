@@ -1,4 +1,5 @@
 #include "board.cpp"
+#include "history.cpp"
 #include "nnue.cpp"
 #include <chrono>
 #include <fstream>
@@ -33,13 +34,12 @@ struct abinfo {
 };
 class Engine {
   Board Bitboards;
-  int historytable[2][6][64];
-  int capthist[2][6][6];
   int TTsize = 2097152;
   std::vector<TTentry> TT;
   bool useNNUE = true;
   bool showWDL = true;
   NNUE EUNN;
+  History Histories;
   int killers[32][2];
   int countermoves[6][64];
   bool gosent = false;
@@ -61,8 +61,7 @@ class Engine {
   std::ofstream dataoutput;
   void initializett();
   void updatett(int index, int depth, int score, int nodetype, int hashmove);
-  void resethistory();
-  int movestrength(int mov, int color);
+  void resetauxdata();
   int quiesce(int alpha, int beta, int color, int depth);
   int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp);
   int wdlmodel(int eval);
@@ -97,16 +96,10 @@ void Engine::updatett(int index, int depth, int score, int nodetype,
     TT[index].data |= (((U64)depth) << 54);
   }
 }
-void Engine::resethistory() {
+void Engine::resetauxdata() {
   for (int i = 0; i < 6; i++) {
     for (int j = 0; j < 64; j++) {
-      historytable[0][i][j] = 0;
-      historytable[1][i][j] = 0;
       countermoves[i][j] = 0;
-    }
-    for (int j = 0; j < 6; j++) {
-      capthist[0][i][j] = 0;
-      capthist[1][i][j] = 0;
     }
   }
   for (int i = 0; i < 32; i++) {
@@ -118,10 +111,11 @@ void Engine::resethistory() {
       pvtable[i][j] = 0;
     }
   }
+  Histories.reset();
 }
 void Engine::startup() {
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
   EUNN.loaddefaultnet();
   EUNN.initializennue(Bitboards.Bitboards);
@@ -133,16 +127,6 @@ void initializelmr() {
       lmr_reductions[i][j] =
           (i == 0 || j == 0) ? 0 : floor(0.59 + log(i) * log(j) * 0.46);
     }
-  }
-}
-int Engine::movestrength(int mov, int color) {
-  int to = (mov >> 6) & 63;
-  int piece = (mov >> 13) & 7;
-  int captured = (mov >> 17) & 7;
-  if (captured) {
-    return 10000 * captured + capthist[color][piece - 2][captured - 2];
-  } else {
-    return historytable[color][piece - 2][to];
   }
 }
 int Engine::quiesce(int alpha, int beta, int color, int depth) {
@@ -172,8 +156,8 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
   if (depth < 1) {
     for (int i = 0; i < movcount - 1; i++) {
       for (int j = i + 1;
-           movestrength(Bitboards.moves[maxdepth + depth][j], color) >
-               movestrength(Bitboards.moves[maxdepth + depth][j - 1], color) &&
+           Histories.movescore(Bitboards.moves[maxdepth + depth][j]) >
+               Histories.movescore(Bitboards.moves[maxdepth + depth][j - 1]) &&
            j > 0;
            j--) {
         std::swap(Bitboards.moves[maxdepth + depth][j],
@@ -322,7 +306,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     if (mov == ttmove) {
       movescore[i] = (1 << 20);
     } else {
-      movescore[i] = movestrength(mov, color);
+      movescore[i] = Histories.movescore(mov);
     }
     if (mov == killers[ply][0]) {
       movescore[i] += 20000;
@@ -398,26 +382,15 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
               killers[ply][1] = killers[ply][0];
               killers[ply][0] = mov;
             }
-            int target = (mov >> 6) & 63;
-            int piece = (mov >> 13) & 7;
-            int captured = (mov >> 17) & 7;
-            if (captured > 0) {
-              capthist[color][piece - 2][captured - 2] +=
-                  (depth * depth * depth -
-                   (depth * depth * depth *
-                    capthist[color][piece - 2][captured - 2]) /
-                       27000);
+            if (iscapture(mov)) {
+              Histories.updatenoisyhistory(mov, depth * depth * depth);
             } else {
-              historytable[color][piece - 2][target] +=
-                  (depth * depth -
-                   (depth * depth * historytable[color][piece - 2][target]) /
-                       27000);
+              Histories.updatequiethistory(mov, depth * depth);
             }
             for (int j = 0; j < i; j++) {
               int mov2 = Bitboards.moves[ply][j];
               if (!iscapture(mov2)) {
-                historytable[color][((mov2 >> 13) & 7) - 2][(mov2 >> 6) & 63] -=
-                    (depth * 3);
+                Histories.updatequiethistory(mov2, -3 * depth);
               }
             }
             if (ply > 0 && nmp && !iscapture(mov)) {
@@ -486,7 +459,7 @@ int Engine::iterative(int color) {
   int depth = 1;
   int bestmove1 = 0;
   int tbscore = 0;
-  resethistory();
+  resetauxdata();
   rootinTB = (__builtin_popcountll(Bitboards.Bitboards[0] |
                                    Bitboards.Bitboards[1]) <= maxtbpieces);
   if (rootinTB && useTB) {
@@ -605,7 +578,7 @@ int Engine::iterative(int color) {
 void Engine::datagenautoplay() {
   suppressoutput = true;
   initializett();
-  resethistory();
+  resetauxdata();
   int seed = mt() % 40320;
   Bitboards.parseFEN(get8294400FEN(seed, seed));
   std::string game = "";
@@ -616,7 +589,7 @@ void Engine::datagenautoplay() {
     if (num_moves == 0) {
       suppressoutput = false;
       initializett();
-      resethistory();
+      resetauxdata();
       seed = mt() % 40320;
       Bitboards.parseFEN(get8294400FEN(seed, seed));
       return;
@@ -632,7 +605,7 @@ void Engine::datagenautoplay() {
   if (Bitboards.generatemoves(0, 0, 0) == 0) {
     suppressoutput = false;
     initializett();
-    resethistory();
+    resetauxdata();
     Bitboards.initialize();
     return;
   }
@@ -691,13 +664,13 @@ void Engine::datagenautoplay() {
   }
   suppressoutput = false;
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
 }
 void Engine::bookgenautoplay(int lowerbound, int upperbound) {
   suppressoutput = true;
   initializett();
-  resethistory();
+  resetauxdata();
   int seed = mt() % 40320;
   Bitboards.parseFEN(get8294400FEN(seed, seed));
   for (int i = 0; i < 8; i++) {
@@ -705,7 +678,7 @@ void Engine::bookgenautoplay(int lowerbound, int upperbound) {
     if (num_moves == 0) {
       suppressoutput = false;
       initializett();
-      resethistory();
+      resetauxdata();
       seed = mt() % 40320;
       Bitboards.parseFEN(get8294400FEN(seed, seed));
       return;
@@ -719,7 +692,7 @@ void Engine::bookgenautoplay(int lowerbound, int upperbound) {
   if (Bitboards.generatemoves(0, 0, 0) == 0) {
     suppressoutput = false;
     initializett();
-    resethistory();
+    resetauxdata();
     Bitboards.initialize();
     return;
   }
@@ -758,7 +731,7 @@ void Engine::bookgenautoplay(int lowerbound, int upperbound) {
   }
   suppressoutput = false;
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
 }
 void Engine::datagen(int n, std::string outputfile) {
@@ -1135,16 +1108,14 @@ void Engine::uci() {
     std::cout << algebraic(internal) << " "
               << Bitboards.see_exceeds(internal, color, 0) << "\n";
   }
-  if (ucicommand == "history") {
+  if (ucicommand == "moveorder") {
     int color = Bitboards.position & 1;
     int movcount = Bitboards.generatemoves(color, 0, 0);
-    std::cout << "History values:\n";
+    std::cout << "Move scores:\n";
     for (int i = 0; i < movcount; i++) {
       int internal = Bitboards.moves[0][i];
-      std::cout
-          << algebraic(internal) << ": "
-          << historytable[color][(internal >> 13) & 7 - 2][(internal >> 6) & 63]
-          << "\n";
+      std::cout << algebraic(internal) << ": " << Histories.movescore(internal)
+                << "\n";
     }
   }
 }
