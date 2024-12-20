@@ -1,6 +1,6 @@
 # Prolix
 
-**Prolix plays _shatranj_, not chess**.
+Active development has moved to [a dedicated repository](https://github.com/sscg13/Prolix). The current branch is archived.
 
 ## Compiling
 The same command as used by OpenBench:
