@@ -214,7 +214,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   int bestmove1 = -1;
   int ttdepth = TT[index].depth;
   int ttage = std::max(Bitboards.gamelength - TT[index].age, 0);
-  bool update = (depth >= (ttdepth - ttage / 3));
+  bool update = (depth >= (ttdepth - ttage / 2));
   bool isPV = (beta - alpha > 1);
   int staticeval = EUNN.evaluate(color);
   bool incheck = (Bitboards.checkers(color) != 0ULL);
