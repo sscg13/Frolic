@@ -1,6 +1,6 @@
 #include "board.cpp"
+#include "history.cpp"
 #include "nnue.cpp"
-
 #include <bit>
 #include <chrono>
 #include <fstream>
@@ -36,10 +36,10 @@ struct abinfo {
 };
 class Engine {
   Board Bitboards;
-  int historytable[2][6][64];
   int TTsize = 1048576;
   std::vector<TTentry> TT;
   NNUE EUNN;
+  History Histories;
   int killers[maxmaxdepth][2];
   bool gosent = false;
   bool stopsearch = false;
@@ -58,7 +58,7 @@ class Engine {
   std::ofstream dataoutput;
   void initializett();
   void updatett(int index, int depth, int score, int nodetype, int hashmove);
-  void resethistory();
+  void resetauxdata();
   int movestrength(int mov, int color);
   int quiesce(int alpha, int beta, int color, int depth);
   int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp);
@@ -96,22 +96,17 @@ void Engine::updatett(int index, int depth, int score, int nodetype,
     TT[index].score = score;
   }
 }
-void Engine::resethistory() {
-  for (int i = 0; i < 6; i++) {
-    for (int j = 0; j < 64; j++) {
-      historytable[0][i][j] = 0;
-      historytable[1][i][j] = 0;
-    }
-  }
+void Engine::resetauxdata() {
   for (int i = 0; i < maxmaxdepth; i++) {
     for (int j = 0; j < maxmaxdepth + 1; j++) {
       pvtable[i][j] = 0;
     }
   }
+  Histories.reset();
 }
 void Engine::startup() {
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
   EUNN.loaddefaultnet();
   EUNN.initializennue(Bitboards.Bitboards);
@@ -124,14 +119,6 @@ void initializelmr() {
           (i == 0 || j == 0) ? 0 : floor(0.53 + log(i) * log(j) / 2.44);
     }
   }
-}
-int Engine::movestrength(int mov, int color) {
-  int to = (mov >> 6) & 63;
-  int piece = (mov >> 13) & 7;
-  int captured = (mov >> 17) & 7;
-  int promoted = (mov >> 21) & 3;
-  return 10000 * captured + 12000 * promoted + 10000 - 1000 * piece +
-         historytable[color][piece - 2][to];
 }
 int Engine::quiesce(int alpha, int beta, int color, int depth) {
   int score = EUNN.evaluate(color);
@@ -159,8 +146,8 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
   if (depth < 4) {
     for (int i = 0; i < movcount - 1; i++) {
       for (int j = i + 1;
-           movestrength(Bitboards.moves[maxdepth + depth][j], color) >
-               movestrength(Bitboards.moves[maxdepth + depth][j - 1], color) &&
+           Histories.movescore(Bitboards.moves[maxdepth + depth][j]) >
+               Histories.movescore(Bitboards.moves[maxdepth + depth][j - 1]) &&
            j > 0;
            j--) {
         std::swap(Bitboards.moves[maxdepth + depth][j],
@@ -279,7 +266,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     if (mov == ttmove) {
       movescore[i] = (1 << 20);
     } else {
-      movescore[i] = movestrength(mov, color);
+      movescore[i] = Histories.movescore(mov);
     }
     if (mov == killers[ply][0]) {
       movescore[i] += 20000;
@@ -334,13 +321,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
               killers[ply][1] = killers[ply][0];
               killers[ply][0] = mov;
             }
-            int target = (mov >> 6) & 63;
-            int piece = (mov >> 13) & 7;
-            historytable[color][piece - 2][target] +=
-                (depth * depth * depth -
-                 (depth * depth * depth *
-                  historytable[color][piece - 2][target]) /
-                     27000);
+            Histories.updatehistory(mov, depth * depth * depth);
             return score;
           }
           alpha = score;
@@ -384,7 +365,7 @@ int Engine::iterative(int color) {
   int returnedscore = score;
   int depth = 1;
   int bestmove1 = 0;
-  resethistory();
+  resetauxdata();
   while (!stopsearch) {
     bestmove = -1;
     int delta = 30;
@@ -478,7 +459,7 @@ int Engine::iterative(int color) {
 void Engine::autoplay() {
   suppressoutput = true;
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
   std::string game = "";
   std::string result = "";
@@ -487,7 +468,7 @@ void Engine::autoplay() {
     if (num_moves == 0) {
       suppressoutput = false;
       initializett();
-      resethistory();
+      resetauxdata();
       Bitboards.initialize();
       return;
     }
@@ -513,7 +494,7 @@ void Engine::autoplay() {
   if (Bitboards.generatemoves(0, 0, 0) == 0) {
     suppressoutput = false;
     initializett();
-    resethistory();
+    resetauxdata();
     Bitboards.initialize();
     return;
   }
@@ -569,7 +550,7 @@ void Engine::autoplay() {
   }
   suppressoutput = false;
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
 }
 void Engine::datagen(int n, std::string outputfile) {
