@@ -66,6 +66,7 @@ public:
   void uci();
   void xboard();
 };
+bool iscapture(int notation) { return ((notation >> 16) & 1); }
 void Engine::initializett() {
   TT.resize(TTsize);
   for (int i = 0; i < TTsize; i++) {
@@ -261,9 +262,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   for (int i = 0; i < movcount; i++) {
     bool nullwindow = (i > 0);
     int mov = Bitboards.moves[ply][i];
-    int r = (movescore[i] < 30000)
-                ? std::min(depth - 1, lmr_reductions[depth][i])
-                : 0;
+    int r = iscapture(mov) ? 0 : std::min(depth - 1, lmr_reductions[depth][i]);
     r = std::max(0, r - (incheck || isPV) - movescore[i] / 16384);
     int e = (movcount == 1) ? 1 : 0;
     // bool prune = ((beta-alpha < 2) && (depth < 5) && (i > 6+4*depth) &&
