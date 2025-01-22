@@ -1,6 +1,7 @@
 #include "board.cpp"
+#include "history.cpp"
 #include "nnue.cpp"
-
+#include "tt.cpp"
 #include <bit>
 #include <chrono>
 #include <fstream>
@@ -21,14 +22,6 @@ std::string uciinfostring =
 const int maxmaxdepth = 32;
 int lmr_reductions[maxmaxdepth][256];
 auto start = std::chrono::steady_clock::now();
-struct TTentry {
-  U64 key;
-  int score;
-  int depth;
-  int age;
-  int nodetype;
-  int hashmove;
-};
 struct abinfo {
   int hashmove;
   int eval;
@@ -36,10 +29,10 @@ struct abinfo {
 };
 class Engine {
   Board Bitboards;
-  int historytable[2][6][64];
-  int TTsize = 1048576;
+  int TTsize = 2097152;
   std::vector<TTentry> TT;
   NNUE EUNN;
+  History Histories;
   int killers[maxmaxdepth][2];
   bool gosent = false;
   bool stopsearch = false;
@@ -57,8 +50,7 @@ class Engine {
   std::mt19937 mt;
   std::ofstream dataoutput;
   void initializett();
-  void updatett(int index, int depth, int score, int nodetype, int hashmove);
-  void resethistory();
+  void resetauxdata();
   int movestrength(int mov, int color);
   int quiesce(int alpha, int beta, int color, int depth);
   int alphabeta(int depth, int ply, int alpha, int beta, int color, bool nmp);
@@ -78,40 +70,20 @@ void Engine::initializett() {
   TT.resize(TTsize);
   for (int i = 0; i < TTsize; i++) {
     TT[i].key = (U64)i + 1ULL;
-    TT[i].score = 0;
-    TT[i].depth = 0;
-    TT[i].age = 0;
-    TT[i].nodetype = 0;
-    TT[i].hashmove = 0;
+    TT[i].data = 0;
   }
 }
-void Engine::updatett(int index, int depth, int score, int nodetype,
-                      int hashmove) {
-  if (index < TTsize) {
-    TT[index].key = Bitboards.zobristhash;
-    TT[index].depth = depth;
-    TT[index].age = Bitboards.gamelength;
-    TT[index].hashmove = hashmove;
-    TT[index].nodetype = nodetype;
-    TT[index].score = score;
-  }
-}
-void Engine::resethistory() {
-  for (int i = 0; i < 6; i++) {
-    for (int j = 0; j < 64; j++) {
-      historytable[0][i][j] = 0;
-      historytable[1][i][j] = 0;
-    }
-  }
+void Engine::resetauxdata() {
   for (int i = 0; i < maxmaxdepth; i++) {
     for (int j = 0; j < maxmaxdepth + 1; j++) {
       pvtable[i][j] = 0;
     }
   }
+  Histories.reset();
 }
 void Engine::startup() {
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
   EUNN.loaddefaultnet();
   EUNN.initializennue(Bitboards.Bitboards);
@@ -124,14 +96,6 @@ void initializelmr() {
           (i == 0 || j == 0) ? 0 : floor(0.53 + log(i) * log(j) / 2.44);
     }
   }
-}
-int Engine::movestrength(int mov, int color) {
-  int to = (mov >> 6) & 63;
-  int piece = (mov >> 13) & 7;
-  int captured = (mov >> 17) & 7;
-  int promoted = (mov >> 21) & 3;
-  return 10000 * captured + 12000 * promoted + 10000 - 1000 * piece +
-         historytable[color][piece - 2][to];
 }
 int Engine::quiesce(int alpha, int beta, int color, int depth) {
   int score = EUNN.evaluate(color);
@@ -159,8 +123,8 @@ int Engine::quiesce(int alpha, int beta, int color, int depth) {
   if (depth < 4) {
     for (int i = 0; i < movcount - 1; i++) {
       for (int j = i + 1;
-           movestrength(Bitboards.moves[maxdepth + depth][j], color) >
-               movestrength(Bitboards.moves[maxdepth + depth][j - 1], color) &&
+           Histories.movescore(Bitboards.moves[maxdepth + depth][j]) >
+               Histories.movescore(Bitboards.moves[maxdepth + depth][j - 1]) &&
            j > 0;
            j--) {
         std::swap(Bitboards.moves[maxdepth + depth][j],
@@ -212,8 +176,8 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   int index = Bitboards.zobristhash % TTsize;
   int ttmove = 0;
   int bestmove1 = -1;
-  int ttdepth = TT[index].depth;
-  int ttage = std::max(Bitboards.gamelength - TT[index].age, 0);
+  int ttdepth = TT[index].depth();
+  int ttage = TT[index].age(Bitboards.gamelength);
   bool update = (depth >= (ttdepth - ttage / 2));
   bool isPV = (beta - alpha > 1);
   int staticeval = EUNN.evaluate(color);
@@ -225,9 +189,9 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     improving = (staticeval > searchstack[ply - 2].eval);
   }
   if (TT[index].key == Bitboards.zobristhash) {
-    score = TT[index].score;
-    ttmove = TT[index].hashmove;
-    int nodetype = TT[index].nodetype;
+    score = TT[index].score();
+    ttmove = TT[index].hashmove();
+    int nodetype = TT[index].nodetype();
     if (ttdepth >= depth) {
       if (!isPV && Bitboards.repetitions() == 0) {
         if (nodetype == 3) {
@@ -279,7 +243,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     if (mov == ttmove) {
       movescore[i] = (1 << 20);
     } else {
-      movescore[i] = movestrength(mov, color);
+      movescore[i] = Histories.movescore(mov);
     }
     if (mov == killers[ply][0]) {
       movescore[i] += 20000;
@@ -328,19 +292,14 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
         if (score > alpha) {
           if (score >= beta) {
             if (update && !stopsearch && abs(score) < 29000) {
-              updatett(index, depth, score, 1, mov);
+              TT[index].update(Bitboards.zobristhash, Bitboards.gamelength,
+                               depth, score, 1, mov);
             }
             if ((((mov >> 16) & 1) == 0) && (killers[ply][0] != mov)) {
               killers[ply][1] = killers[ply][0];
               killers[ply][0] = mov;
             }
-            int target = (mov >> 6) & 63;
-            int piece = (mov >> 13) & 7;
-            historytable[color][piece - 2][target] +=
-                (depth * depth * depth -
-                 (depth * depth * depth *
-                  historytable[color][piece - 2][target]) /
-                     27000);
+            Histories.updatehistory(mov, depth * depth * depth);
             return score;
           }
           alpha = score;
@@ -371,8 +330,8 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     }
   }
   if (update && !stopsearch) {
-    updatett(index, depth, bestscore, 2 + allnode,
-             Bitboards.moves[ply][bestmove1]);
+    TT[index].update(Bitboards.zobristhash, Bitboards.gamelength, depth,
+                     bestscore, 2 + allnode, Bitboards.moves[ply][bestmove1]);
   }
   return bestscore;
 }
@@ -384,7 +343,7 @@ int Engine::iterative(int color) {
   int returnedscore = score;
   int depth = 1;
   int bestmove1 = 0;
-  resethistory();
+  resetauxdata();
   while (!stopsearch) {
     bestmove = -1;
     int delta = 30;
@@ -478,7 +437,7 @@ int Engine::iterative(int color) {
 void Engine::autoplay() {
   suppressoutput = true;
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
   std::string game = "";
   std::string result = "";
@@ -487,7 +446,7 @@ void Engine::autoplay() {
     if (num_moves == 0) {
       suppressoutput = false;
       initializett();
-      resethistory();
+      resetauxdata();
       Bitboards.initialize();
       return;
     }
@@ -513,7 +472,7 @@ void Engine::autoplay() {
   if (Bitboards.generatemoves(0, 0, 0) == 0) {
     suppressoutput = false;
     initializett();
-    resethistory();
+    resetauxdata();
     Bitboards.initialize();
     return;
   }
@@ -569,7 +528,7 @@ void Engine::autoplay() {
   }
   suppressoutput = false;
   initializett();
-  resethistory();
+  resetauxdata();
   Bitboards.initialize();
 }
 void Engine::datagen(int n, std::string outputfile) {
@@ -880,6 +839,30 @@ void Engine::uci() {
       reader--;
     }
     Bitboards.perftnobulk(sum, sum, color);
+  }
+  if (ucicommand.substr(0, 14) == "setoption name") {
+    int reader = 15;
+    std::string option = "";
+    while (ucicommand[reader] != ' ') {
+      option += ucicommand[reader];
+      reader++;
+    }
+    if (option == "Hash") {
+      reader = ucicommand.length() - 1;
+      int sum = 0;
+      int add = 1;
+      while (ucicommand[reader] != ' ') {
+        sum += ((int)(ucicommand[reader] - 48)) * add;
+        add *= 10;
+        reader--;
+      }
+      if (sum <= 1024) {
+        int oldTTsize = TTsize;
+        TTsize = 65536 * sum;
+        TT.resize(TTsize);
+        TT.shrink_to_fit();
+      }
+    }
   }
   if (ucicommand.substr(0, 3) == "see") {
     std::string mov = ucicommand.substr(4, ucicommand.length() - 4);
