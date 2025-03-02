@@ -229,6 +229,8 @@ public:
   int movescore[64][256];
   int gamephase[2] = {0, 0};
   U64 zobristhash = 0ULL;
+  int color(int square);
+  int piece(int square);
   U64 scratchzobrist();
   void initialize();
   int repetitions();
@@ -247,6 +249,22 @@ public:
   bool see_exceeds(int mov, int color, int threshold);
 };
 
+int Board::color(int square) {
+  for (int i = 0; i < 2; i++) {
+    if (Bitboards[i] & (1ULL << square)) {
+      return i;
+    }
+  }
+  return -1;
+}
+int Board::piece(int square) {
+  for (int i = 2; i < 8; i++) {
+    if (Bitboards[i] & (1ULL << square)) {
+      return i-2;
+    }
+  }
+  return -1;
+}
 U64 Board::scratchzobrist() {
   U64 scratch = 0ULL;
   for (int i = 0; i < 8; i++) {

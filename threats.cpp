@@ -1,5 +1,6 @@
 #include "board.cpp"
 #include <string>
+#include <algorithm>
 int pieceoffsets[12][66];
 int coloroffset;
 
@@ -75,11 +76,11 @@ void filloffsets() {
     }
 }
 int threatindex(int attacker, int from, int to, bool enemy) {
-    std::cout << pieceoffsets[attacker][65];
+    /*std::cout << pieceoffsets[attacker][65];
     std::cout << "+" << enemy*pieceoffsets[attacker][64];
     std::cout << "+" << pieceoffsets[attacker][from];
     std::cout << "+" << __builtin_popcountll(((1ULL << to)-1) & emptyboardattacks(attacker, from));
-    std::cout << "+768=";
+    std::cout << "+768=";*/
     return pieceoffsets[attacker][65]
         + enemy*pieceoffsets[attacker][64]
         + pieceoffsets[attacker][from]
@@ -97,6 +98,7 @@ int main(int argc, char *argv[]) {
     int whitekingsquare = __builtin_ctzll(Bitboards.Bitboards[0] & Bitboards.Bitboards[7]);
     int mirror = ((whitekingsquare & 7) >= 4) ? 7 : 0;
     U64 occupancy = Bitboards.Bitboards[0] | Bitboards.Bitboards[1];
+    std::vector<int> indices;
     while (occupancy) {
         int from = __builtin_ctzll(occupancy);
         int color = Bitboards.color(from);
@@ -105,10 +107,16 @@ int main(int argc, char *argv[]) {
         while (attacks) {
             int to = __builtin_ctzll(attacks);
             int enemy = (Bitboards.color(to) != color);
-            std::cout << coordinate(from) << coordinate(to) << " index: " << threatindex(6*color+piece, mirror^from, mirror^to, enemy) << std::endl;
+            int index = threatindex(6*color+piece, mirror^from, mirror^to, enemy);
+            indices.push_back(index);
+            std::cout << coordinate(from) << coordinate(to) << " index: " << index << std::endl;
             attacks ^= (1ULL << to);
         }
         occupancy ^= (1ULL << from);
+    }
+    std::sort(indices.begin(), indices.end());
+    for (auto index : indices) {
+        std::cout << index << ", ";
     }
     return 0;
 }
