@@ -1,5 +1,5 @@
 EXE := Frolic
-EVALFILE := chess-net13.nnue
+EVALFILE := chess-net15.nnue
 
 SOURCES := Frolic.cpp
 
