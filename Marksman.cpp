@@ -13,7 +13,7 @@ using namespace std;
 std::string proto = "none";
 //clang-format off
 std::string uciinfostring =
-    "id name Frolic\n"
+    "id name Marksman\n"
     "id author sscg13\n"
     "option name Threads type spin default 1 min 1 max 1\n"
     "option name Hash type spin default 32 min 1 max 1024\n"

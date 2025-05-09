@@ -56,11 +56,18 @@ const int castlechange[64] = {
     15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
     15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
     15, 15, 15, 15, 15, 15, 15, 15, 7,  15, 15, 15, 3,  15, 15, 11};
+const int materialm[6] = {82, 337, 365, 477, 1025, 0};
+const int materiale[6] = {94, 281, 297, 512, 936, 0};
 const int phase[6] = {0, 1, 1, 2, 4, 0};
 U64 shift_w(U64 bitboard) { return (bitboard & ~FileA) >> 1; }
 U64 shift_n(U64 bitboard) { return bitboard << 8; }
 U64 shift_s(U64 bitboard) { return bitboard >> 8; }
 U64 shift_e(U64 bitboard) { return (bitboard & ~FileH) << 1; }
+int pop_lsb(U64 bitboard) {
+  int lsb = __builtin_ctzll(bitboard);
+  bitboard &= (bitboard - 1);
+  return lsb;
+}
 void initializeleaperattacks() {
   for (int i = 0; i < 64; i++) {
     U64 square = 1ULL << i;
@@ -216,17 +223,17 @@ std::string algebraic(int notation) {
 class Board {
   U64 zobrist[1024];
   int history[1024];
+  U64 quiets[64];
   int last = 0;
   int root = 0;
   const int startpiece[16] = {3, 1, 2, 4, 5, 2, 1, 3, 0, 0, 0, 0, 0, 0, 0, 0};
 
 public:
   U64 Bitboards[8];
+  int mailbox[64];
   int gamelength = 0;
   int position = 0;
   int nodecount = 0;
-  int moves[64][256];
-  int movescore[64][256];
   int gamephase[2] = {0, 0};
   U64 zobristhash = 0ULL;
   U64 scratchzobrist();
@@ -235,11 +242,13 @@ public:
   int halfmovecount();
   bool insufficientmaterial();
   U64 checkers(int color);
+  bool pinned(int square, int color);
   void makenullmove();
   void unmakenullmove();
+  int constructmove(int color, int from, int to);
   void makemove(int notation, bool reversible);
   void unmakemove(int notation);
-  int generatemoves(int color, bool capturesonly, int depth);
+  int generatemoves(int color, bool capturesonly, int depth, int* movelist);
   U64 perft(int depth, int initialdepth, int color);
   U64 perftnobulk(int depth, int initialdepth, int color);
   void parseFEN(std::string FEN);
@@ -322,6 +331,24 @@ U64 Board::checkers(int color) {
   attacks &= Bitboards[opposite];
   return attacks;
 }
+bool Board::pinned(int square, int color) {
+  U64 occupied = Bitboards[0] | Bitboards[1];
+  U64 enemyrooks = (Bitboards[4] | Bitboards[6]) & Bitboards[color ^ 1];
+  U64 enemybishops = (Bitboards[5] | Bitboards[6]) & Bitboards[color ^ 1];
+  U64 kingsquare = Bitboards[color] & Bitboards[7];
+  if ((DiagAttacks(occupied, square) & kingsquare) && (DiagAttacks(occupied, square) & enemybishops)) {
+    return true;
+  }
+  if ((AntiAttacks(occupied, square) & kingsquare) && (AntiAttacks(occupied, square) & enemybishops)) {
+    return true;
+  }
+  if ((FileAttacks(occupied, square) & kingsquare) && (FileAttacks(occupied, square) & enemyrooks)) {
+    return true;
+  }
+  if ((GetRankAttacks(occupied, square) & kingsquare) && (GetRankAttacks(occupied, square) & enemyrooks)) {
+    return true;
+  }
+}
 void Board::makenullmove() {
   gamelength++;
   int halfmove = (position >> 1) & 127;
@@ -342,6 +369,18 @@ void Board::unmakenullmove() {
   gamelength--;
   position = history[gamelength];
   zobristhash = zobrist[gamelength];
+}
+int Board::constructmove(int color, int from, int to) {
+  int move = from;
+  move |= (to << 6);
+  move |= (color << 12);
+  int piece = mailbox[from];
+  move |= ((piece & 7) << 13);
+  int captured = mailbox[to];
+  if (captured > 0) {
+    move |= (1 << 16);
+    move |= (captured << 17);
+  }
 }
 void Board::makemove(int notation, bool reversible) {
   // 6 bits from square, 6 bits to square, 1 bit color, 3 bits piece moved, 1
@@ -474,7 +513,7 @@ void Board::unmakemove(int notation) {
     Bitboards[color ^ 1] ^= (1ULL << shadow);
   }
 }
-int Board::generatemoves(int color, bool capturesonly, int depth) {
+int Board::generatemoves(int color, bool capturesonly, int depth, int* movelist) {
   int movecount = 0;
   int kingsquare = __builtin_popcountll((Bitboards[color] & Bitboards[7]) - 1);
   int pinrank = kingsquare & 56;
@@ -1224,102 +1263,4 @@ std::string Board::getFEN() {
   reverse(bruh.begin(), bruh.end());
   FEN = FEN + bruh + " 1";
   return FEN;
-}
-bool Board::see_exceeds(int move, int color, int threshold) {
-  int see_values[6] = {10, 30, 30, 50, 90, 20000};
-  int target = (move >> 6) & 63;
-  int victim = (move >> 17) & 7;
-  int attacker = (move >> 13) & 7;
-  int value = (victim > 0) ? see_values[victim - 2] - threshold : -threshold;
-  if (value < 0) {
-    return false;
-  }
-  if (value - see_values[attacker - 2] >= 0) {
-    return true;
-  }
-  int pieces[2][6] = {{0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0}};
-  U64 occupied = Bitboards[0] | Bitboards[1];
-  U64 to = (1ULL << target);
-  U64 from = (1ULL << (move & 63));
-  U64 us = Bitboards[color];
-  U64 enemy = Bitboards[color ^ 1];
-  U64 knights = KnightAttacks[target] & Bitboards[3];
-  U64 kings = KingAttacks[target] & Bitboards[7];
-  pieces[0][0] =
-      __builtin_popcountll((PawnAttacks[color][target] & Bitboards[2] & enemy));
-  pieces[1][0] = __builtin_popcountll(
-      (PawnAttacks[color ^ 1][target] & Bitboards[2] & us));
-  pieces[0][1] = __builtin_popcountll(knights & enemy);
-  pieces[1][1] = __builtin_popcountll(knights & us);
-  pieces[0][5] = __builtin_popcountll(kings & enemy);
-  pieces[1][5] = __builtin_popcountll(kings & us);
-  occupied ^= (enemy & Bitboards[5]);
-  occupied |= to;
-  occupied &= (~from);
-  pieces[0][3] = __builtin_popcountll(
-      (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
-      Bitboards[5] & enemy);
-  occupied ^= (Bitboards[5]);
-  occupied |= to;
-  occupied &= (~from);
-  pieces[1][3] = __builtin_popcountll(
-      (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
-      Bitboards[5] & us);
-  occupied ^= (us & (Bitboards[5] | Bitboards[2] | Bitboards[4]));
-  occupied |= to;
-  occupied &= (~from);
-  pieces[1][2] = __builtin_popcountll(
-      (DiagAttacks(occupied, target) | AntiAttacks(occupied, target)) &
-      Bitboards[4] & us);
-  occupied ^= (Bitboards[4] | Bitboards[2]);
-  occupied |= to;
-  occupied &= (~from);
-  pieces[0][2] = __builtin_popcountll(
-      (DiagAttacks(occupied, target) | AntiAttacks(occupied, target)) &
-      Bitboards[4] & enemy);
-  occupied ^= (enemy & (Bitboards[5] | Bitboards[6]));
-  occupied |= to;
-  occupied &= (~from);
-  pieces[0][4] += __builtin_popcountll(
-      (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
-      Bitboards[6] & enemy);
-  occupied ^= (enemy & (Bitboards[2] | Bitboards[4] | Bitboards[5]));
-  occupied |= to;
-  occupied &= (~from);
-  pieces[0][4] += __builtin_popcountll(
-      (DiagAttacks(occupied, target) | AntiAttacks(occupied, target)) &
-      Bitboards[6] & enemy);
-  occupied ^= (Bitboards[2] | Bitboards[4] | Bitboards[6]);
-  occupied |= to;
-  occupied &= (~from);
-  pieces[1][4] += __builtin_popcountll(
-      (DiagAttacks(occupied, target) | AntiAttacks(occupied, target)) &
-      Bitboards[6] & us);
-  occupied ^= (us & (Bitboards[2] | Bitboards[4] | Bitboards[5]));
-  occupied |= to;
-  occupied &= (~from);
-  pieces[1][4] += __builtin_popcountll(
-      (FileAttacks(occupied, target) | GetRankAttacks(occupied, target)) &
-      Bitboards[6] & us);
-  if (attacker > 2) {
-    pieces[1][attacker - 2]--;
-  }
-  int next[2] = {0, 0};
-  int previous[2] = {0, attacker - 2};
-  int i = 0;
-  while (true) {
-    while (pieces[i][next[i]] == 0 && next[i] < 6) {
-      next[i]++;
-    }
-    if (next[i] > 5) {
-      return (value >= 0);
-    }
-    value += (2 * i - 1) * see_values[previous[i ^ 1]];
-    if ((2 * i - 1) * (value + (1 - 2 * i) * see_values[next[i]]) >= 1 - i) {
-      return i;
-    }
-    previous[i] = next[i];
-    pieces[i][next[i]]--;
-    i ^= 1;
-  }
 }
