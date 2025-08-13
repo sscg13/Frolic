@@ -32,7 +32,7 @@ int History::movescore(int move) {
   int promoted = (move >> 21) & 3;
   if (captured) {
     return 10000 * captured + 12000 * promoted + 10000 - 1000 * piece +
-         noisyhistory[color][piece - 2][captured - 2];
+           noisyhistory[color][piece - 2][captured - 2];
   } else {
     return quiethistory[color][piece - 2][to];
   }

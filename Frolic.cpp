@@ -189,7 +189,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     improving = (staticeval > searchstack[ply - 2].eval);
   }
   if (TT[index].key == Bitboards.zobristhash) {
-    score = TT[index].score();
+    score = TT[index].score(ply);
     ttmove = TT[index].hashmove();
     int nodetype = TT[index].nodetype();
     if (ttdepth >= depth) {
@@ -293,7 +293,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
           if (score >= beta) {
             if (update && !stopsearch && abs(score) < 29000) {
               TT[index].update(Bitboards.zobristhash, Bitboards.gamelength,
-                               depth, score, 1, mov);
+                               depth, ply, score, 1, mov);
             }
             if ((((mov >> 16) & 1) == 0) && (killers[ply][0] != mov)) {
               killers[ply][1] = killers[ply][0];
@@ -334,7 +334,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
     }
   }
   if (update && !stopsearch) {
-    TT[index].update(Bitboards.zobristhash, Bitboards.gamelength, depth,
+    TT[index].update(Bitboards.zobristhash, Bitboards.gamelength, depth, ply,
                      bestscore, 2 + allnode, Bitboards.moves[ply][bestmove1]);
   }
   return bestscore;
@@ -425,7 +425,8 @@ int Engine::iterative(int color) {
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
   if (proto == "uci") {
     int nps = 1000 * (Bitboards.nodecount / std::max(1LL, timetaken.count()));
-    std::cout << "info nodes " << Bitboards.nodecount << " nps " << nps << std::endl;
+    std::cout << "info nodes " << Bitboards.nodecount << " nps " << nps
+              << std::endl;
   }
   if (proto == "uci") {
     std::cout << "bestmove " << algebraic(bestmove1) << std::endl;
