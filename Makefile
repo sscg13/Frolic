@@ -1,11 +1,12 @@
 EXE := Frolic
 EVALFILE := chess-net15.nnue
+ARCH := native
 
 SOURCES := Frolic.cpp
 
 CXX := clang++
 
-CXXFLAGS := -O3 -march=native -static -pthread -DEUNNfile=\"$(EVALFILE)\"
+CXXFLAGS := -O3 -march=$(ARCH) -static -pthread -DEUNNfile=\"$(EVALFILE)\"
 
 SUFFIX := .exe
 

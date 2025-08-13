@@ -299,7 +299,11 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
               killers[ply][1] = killers[ply][0];
               killers[ply][0] = mov;
             }
-            Histories.updatehistory(mov, depth * depth * depth);
+            if ((mov >> 16) & 1) {
+              Histories.updatenoisyhistory(mov, depth * depth);
+            } else {
+              Histories.updatequiethistory(mov, depth * depth * depth);
+            }
             return score;
           }
           alpha = score;
