@@ -382,7 +382,7 @@ int Engine::iterative(int color) {
           for (int i = 1; i < pvtable[0][0]; i++) {
             std::cout << algebraic(pvtable[0][i]) << " ";
           }
-          std::cout << "\n";
+          std::cout << std::endl;
         } else {
           int matescore;
           if (score > 0) {
@@ -396,7 +396,7 @@ int Engine::iterative(int color) {
           for (int i = 1; i < pvtable[0][0]; i++) {
             std::cout << algebraic(pvtable[0][i]) << " ";
           }
-          std::cout << "\n";
+          std::cout << std::endl;
         }
       }
       if (proto == "xboard") {
@@ -405,7 +405,7 @@ int Engine::iterative(int color) {
         for (int i = 1; i < pvtable[0][0]; i++) {
           std::cout << algebraic(pvtable[0][i]) << " ";
         }
-        std::cout << "\n";
+        std::cout << std::endl;
       }
       depth++;
       if (depth == maxdepth) {
@@ -425,13 +425,13 @@ int Engine::iterative(int color) {
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start);
   if (proto == "uci") {
     int nps = 1000 * (Bitboards.nodecount / std::max(1LL, timetaken.count()));
-    std::cout << "info nodes " << Bitboards.nodecount << " nps " << nps << "\n";
+    std::cout << "info nodes " << Bitboards.nodecount << " nps " << nps << std::endl;
   }
   if (proto == "uci") {
-    std::cout << "bestmove " << algebraic(bestmove1) << "\n";
+    std::cout << "bestmove " << algebraic(bestmove1) << std::endl;
   }
   if (proto == "xboard") {
-    std::cout << "move " << algebraic(bestmove1) << "\n";
+    std::cout << "move " << algebraic(bestmove1) << std::endl;
     Bitboards.makemove(bestmove1, 0);
     EUNN.forwardaccumulators(bestmove1);
   }
