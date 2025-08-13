@@ -188,6 +188,13 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
   if (ply > 1) {
     improving = (staticeval > searchstack[ply - 2].eval);
   }
+  if (!isPV) {
+    alpha = std::max(alpha, -28000 + ply);
+    beta  = std::min(beta,  28000 - ply - 1);
+    if (alpha >= beta) {
+      return alpha;
+    }
+  }
   if (TT[index].key == Bitboards.zobristhash) {
     score = TT[index].score(ply);
     ttmove = TT[index].hashmove();
