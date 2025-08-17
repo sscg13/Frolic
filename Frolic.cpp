@@ -669,7 +669,6 @@ void Engine::uci() {
         mov += ucicommand[i];
       }
     }
-
     EUNN.initializennue(Bitboards.Bitboards);
   }
   if (ucicommand.substr(0, 12) == "position fen") {
