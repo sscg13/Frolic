@@ -21,13 +21,14 @@ class NNUE {
   short int layer1bias[nnuesize];
   int ourlayer2[outputbuckets][nnuesize];
   int theirlayer2[outputbuckets][nnuesize];
-  short int whitehidden[nnuesize];
-  short int blackhidden[nnuesize];
+  short int accumulation[128][nnuesize];
   int finalbias[outputbuckets];
   int totalmaterial;
+  int ply;
 
 public:
   void loaddefaultnet();
+  const short int* layer1weights(int side, int color, int piece, int square);
   void activatepiece(int color, int piece, int square);
   void deactivatepiece(int color, int piece, int square);
   void initializennue(uint64_t *Bitboards);
@@ -75,27 +76,34 @@ void NNUE::loaddefaultnet() {
     offset += 2;
   }
 }
+const short int* NNUE::layer1weights(int side, int color, int piece, int square) {
+  int featureindex = 64 * (6 * (color ^ side) + piece) + (56 * side) ^ square;
+  return nnuelayer1[featureindex];
+}
 void NNUE::activatepiece(int color, int piece, int square) {
-  for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] += nnuelayer1[64 * (6 * color + piece) + square][i];
-    blackhidden[i] +=
-        nnuelayer1[64 * (6 * (color ^ 1) + piece) + 56 ^ square][i];
+  for (int side = 0; side < 2; side++) {
+    short int* accptr = accumulation[2 * ply + side];
+    const short int* weightsptr = layer1weights(side, color, piece, square);
+    for (int i = 0; i < nnuesize; i++) {
+      accptr[i] += weightsptr[i];
+    }
   }
-  totalmaterial += material[piece];
 }
 void NNUE::deactivatepiece(int color, int piece, int square) {
-  for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] -= nnuelayer1[64 * (6 * color + piece) + square][i];
-    blackhidden[i] -=
-        nnuelayer1[64 * (6 * (color ^ 1) + piece) + 56 ^ square][i];
+  for (int side = 0; side < 2; side++) {
+    short int* accptr = accumulation[2 * ply + side];
+    const short int* weightsptr = layer1weights(side, color, piece, square);
+    for (int i = 0; i < nnuesize; i++) {
+      accptr[i] -= weightsptr[i];
+    }
   }
-  totalmaterial -= material[piece];
 }
 void NNUE::initializennue(uint64_t *Bitboards) {
   totalmaterial = 0;
+  ply = 0;
   for (int i = 0; i < nnuesize; i++) {
-    whitehidden[i] = layer1bias[i];
-    blackhidden[i] = layer1bias[i];
+    accumulation[0][i] = layer1bias[i];
+    accumulation[1][i] = layer1bias[i];
   }
   for (int i = 0; i < 12; i++) {
     uint64_t pieces = (Bitboards[i / 6] & Bitboards[2 + (i % 6)]);
@@ -105,6 +113,7 @@ void NNUE::initializennue(uint64_t *Bitboards) {
       activatepiece(i / 6, i % 6, square);
       pieces ^= (1ULL << square);
     }
+    totalmaterial += piececount * material[i % 6];
   }
 }
 void NNUE::forwardaccumulators(int notation) {
@@ -120,10 +129,19 @@ void NNUE::forwardaccumulators(int notation) {
   int to1 = (to & 4) ? to - 1 : to + 1;
   int to2 = epcapture ? (to + 16 * color - 8) : to;
   int piece2 = (promoted > 0) ? promoted + 1 : piece - 2;
-  activatepiece(color, piece2, to);
-  deactivatepiece(color, piece - 2, from);
+  for (int side = 0; side < 2; side++) {
+    short int *newaccptr = accumulation[2 * (ply + 1) + side];
+    const short int *oldaccptr = accumulation[2 * ply + side];
+    const short int *addweightsptr = layer1weights(side, color, piece2, to);
+    const short int *subweightsptr = layer1weights(side, color, piece - 2, from);
+    for (int i = 0; i < nnuesize; i++) {
+      newaccptr[i] = oldaccptr[i] + addweightsptr[i] - subweightsptr[i];
+    }
+  }
+  ply++;
   if (captured > 0) {
     deactivatepiece(color ^ 1, captured - 2, to2);
+    totalmaterial -= material[captured - 2];
   }
   if (castling > 0) {
     activatepiece(color, 3, to1);
@@ -131,49 +149,25 @@ void NNUE::forwardaccumulators(int notation) {
   }
 }
 void NNUE::backwardaccumulators(int notation) {
-  int from = notation & 63;
-  int to = (notation >> 6) & 63;
-  int color = (notation >> 12) & 1;
-  int piece = (notation >> 13) & 7;
-  int captured = (notation >> 17) & 7;
-  int promoted = (notation >> 21) & 3;
   int epcapture = (notation >> 25) & 1;
-  int castling = (notation >> 23) & 1;
-  int from1 = to - 2;
-  int to1 = to + 1;
-  int to2 = to;
-  if (to & 4) {
-    from1 = to + 1;
-    to1 = to - 1;
-  }
-  if (epcapture) {
-    captured = 2;
-    to2 = to + 16 * color - 8;
-  }
-  int piece2 = (promoted > 0) ? promoted + 1 : piece - 2;
-  deactivatepiece(color, piece2, to);
-  activatepiece(color, piece - 2, from);
+  int captured = epcapture ? 2 : ((notation >> 17) & 7);
   if (captured > 0) {
-    activatepiece(color ^ 1, captured - 2, to2);
+    totalmaterial += material[captured - 2];
   }
-  if (castling > 0) {
-    deactivatepiece(color, 3, to1);
-    activatepiece(color, 3, from1);
-  }
+  ply--;
 }
 int NNUE::evaluate(int color) {
   int bucket = std::min(totalmaterial / bucketdivisor, outputbuckets - 1);
   int eval = finalbias[bucket] * evalQA;
-  if (color == 0) {
-    for (int i = 0; i < nnuesize; i++) {
-      eval += screlu(whitehidden[i]) * ourlayer2[bucket][i];
-      eval += screlu(blackhidden[i]) * theirlayer2[bucket][i];
-    }
-  } else {
-    for (int i = 0; i < nnuesize; i++) {
-      eval += screlu(whitehidden[i]) * theirlayer2[bucket][i];
-      eval += screlu(blackhidden[i]) * ourlayer2[bucket][i];
-    }
+  short int *stmaccptr = accumulation[2 * ply + color];
+  short int *nstmaccptr = accumulation[2 * ply + (color ^ 1)];
+  const int *stmweightsptr = ourlayer2[bucket];
+  const int *nstmweightsptr = theirlayer2[bucket];
+  for (int i = 0; i < nnuesize; i++) {
+    eval += screlu(stmaccptr[i]) * stmweightsptr[i];
+  }
+  for (int i = 0; i < nnuesize; i++) {
+    eval += screlu(nstmaccptr[i]) * nstmweightsptr[i];
   }
   eval /= evalQA;
   eval *= evalscale;
