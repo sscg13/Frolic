@@ -309,7 +309,7 @@ int Engine::alphabeta(int depth, int ply, int alpha, int beta, int color,
             if ((mov >> 16) & 1) {
               Histories.updatenoisyhistory(mov, depth * depth);
             } else {
-              Histories.updatequiethistory(mov, depth * depth * depth);
+              Histories.updatequiethistory(mov, depth * depth);
             }
             return score;
           }
